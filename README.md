@@ -8,7 +8,7 @@ This project is intended for small internal deployments or as a starting point f
 
 ---
 
-# Features
+## Features
 
 - Clean single-page interface
 - Fast search across multiple fields
@@ -23,23 +23,23 @@ This project is intended for small internal deployments or as a starting point f
 
 ---
 
-# Technology Stack
+## Technology Stack
 
-Frontend:
-- HTML
-- CSS
-- JavaScript
+### Frontend
+- HTML  
+- CSS  
+- JavaScript  
 
-Backend:
-- Python
-- Flask
+### Backend
+- Python  
+- Flask  
 
-Other libraries:
-- filelock (for safe file access)
+### Other Libraries
+- `filelock` (for safe file access)
 
 ---
 
-# Project structure
+## Project Structure
 
 ```text
 .
@@ -49,52 +49,53 @@ Other libraries:
 ├── .gitignore
 ├── README.md
 └── app/
-    ├── index.html
+    └── index.html
 ```
 
+### Runtime Directories
 
-Runtime directories (created automatically when the server runs):
+These are created automatically when the server runs:
 
 ```text
 app/
 └── data/
-├── inventory.json
-├── backups/
-└── hourly_backups/
-
+    ├── inventory.json
+    ├── backups/
+    └── hourly_backups/
 ```
+
 ---
 
-# Requirements
+## Requirements
 
 - Python **3.10+**
-- pip
+- `pip`
 
 ---
 
-# Installation
+## Installation
 
 Clone the repository:
 
-
+```bash
 git clone https://github.com/RNYR/LogApp.git
-
+```
 
 Enter the project directory:
 
-
+```bash
 cd equipment-log
-
+```
 
 Install dependencies:
 
-
+```bash
 pip install -r requirements.txt
-
+```
 
 ---
 
-# Configuration
+## Configuration
 
 Before running the application, set the required environment variables.
 
@@ -102,39 +103,39 @@ These define the administrator login credentials and server port.
 
 ### Linux / macOS
 
-
+```bash
 export LOGAPP_ADMIN_USERNAME="admin"
 export LOGAPP_ADMIN_PASSWORD="change-this-password"
 export PORT="8787"
-
+```
 
 ### Windows PowerShell
 
-
+```powershell
 $env:LOGAPP_ADMIN_USERNAME="admin"
 $env:LOGAPP_ADMIN_PASSWORD="change-this-password"
 $env:PORT="8787"
-
+```
 
 ---
 
-# Running the Application
+## Running the Application
 
 Start the Flask server:
 
-
+```bash
 python server.py
-
+```
 
 Open the application in your browser:
 
-
+```text
 http://localhost:8787
-
+```
 
 ---
 
-# How the Application Works
+## How the Application Works
 
 The Flask backend serves a single-page frontend and provides API endpoints for managing inventory data.
 
@@ -145,48 +146,48 @@ Two usage modes exist:
 ### Normal Mode
 
 Users can:
-- change equipment status
-- update item notes
+- Change equipment status
+- Update item notes
 
 ### Admin Mode
 
 Admin users can:
-- add new entries
-- edit item name
-- edit serial/part number
-- edit equipment type
-- edit status
-- edit notes
-- delete entries
+- Add new entries
+- Edit item names
+- Edit serial/part numbers
+- Edit equipment types
+- Edit status
+- Edit notes
+- Delete entries
 
 Admin access requires the credentials defined in environment variables.
 
 ---
 
-# Data Storage
+## Data Storage
 
 Inventory data is stored in:
 
-
+```text
 app/data/inventory.json
-
+```
 
 Backup files are automatically generated in:
 
-
+```text
 app/data/backups/
 app/data/hourly_backups/
-
+```
 
 Backups help recover previous inventory states if data becomes corrupted or accidentally modified.
 
 ---
 
-# Locking System
+## Locking System
 
 The application includes a simple in-memory editing lock to prevent simultaneous conflicting writes.
 
-Key behaviors:
+### Key Behaviors
 
 - Only one editing session can hold the lock at a time
 - Lock modes include `admin` and `normal`
@@ -197,36 +198,36 @@ Restarting the server clears any active lock.
 
 ---
 
-# Deployment Notes
+## Deployment Notes
 
 This project intentionally avoids using a database to keep setup simple.
 
 For larger deployments you may want to extend it with:
 
-- database storage (PostgreSQL, SQLite, etc.)
-- user accounts and role management
+- Database storage (PostgreSQL, SQLite, etc.)
+- User accounts and role management
 - HTTPS support
-- proper authentication pages
-- audit logging
+- Proper authentication pages
+- Audit logging
 - API authentication tokens
 
 ---
 
-# Running as a Windows Service
+## Running as a Windows Service
 
 The application can be run as a background service using tools such as **NSSM**.
 
 Typical setup:
 
-1. Install Python and project dependencies
-2. Configure environment variables for admin credentials
-3. Create an NSSM service pointing to Python
-4. Use `server.py` as the startup script
-5. Set the working directory to the project folder
+1. Install Python and project dependencies  
+2. Configure environment variables for admin credentials  
+3. Create an NSSM service pointing to Python  
+4. Use `server.py` as the startup script  
+5. Set the working directory to the project folder  
 
 ---
 
-# Files to Exclude from Version Control
+## Files to Exclude from Version Control
 
 Do **not** commit the following files to GitHub:
 
@@ -241,7 +242,7 @@ Use the provided `.gitignore` file to prevent accidental uploads.
 
 ---
 
-# Security Notes
+## Security Notes
 
 Before publishing this project or deploying it publicly:
 
@@ -253,7 +254,7 @@ Before publishing this project or deploying it publicly:
 
 ---
 
-# License
+## License
 
 This project is licensed under the **MIT License**.
 
