@@ -1,0 +1,1125 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Equipment Log</title>
+
+<link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+
+<style>
+:root{
+  --status-feas:#93c47d;
+  --status-devel:#8faadc;
+  --status-onsite:#ffd966;
+  --status-loaned:#e06666;
+
+  --bg:rgb(3,46,63);
+  --accent:rgb(10,153,209);
+  --card:rgb(247,250,253);
+
+  --field-border:rgba(0,0,0,0.12);
+  --shadow:0 10px 20px rgba(0,0,0,0.15);
+
+  --w-id: 140px;
+  --w-sn: 180px;
+  --w-type: 160px;
+  --w-status: 180px;
+  --w-note: 250px;
+  --w-action: 110px;
+  --w-name-min: 360px;
+}
+
+*{box-sizing:border-box;}
+
+body{
+  font-family:'Montserrat', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  background:var(--bg);
+  margin:0;
+  padding:28px;
+  -webkit-font-smoothing:antialiased;
+  overflow-x:hidden;
+}
+
+.container{
+  width:min(1900px,100%);
+  margin:0 auto;
+  background:var(--card);
+  padding:28px;
+  border-radius:18px;
+  box-shadow:0 20px 40px rgba(0,0,0,0.4);
+  height:auto;
+  overflow:visible;
+}
+
+.header-flex{
+  position:relative;
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:12px;
+  margin-bottom:20px;
+  min-height:48px;
+}
+
+h2{
+  margin:0;
+  font-weight:500;
+  color:rgba(3,46,63,0.95);
+  position:relative;
+  z-index:1;
+}
+
+.header-actions{
+  display:flex;
+  justify-content:flex-end;
+  margin-left:auto;
+  position:relative;
+  z-index:1;
+}
+
+.search-wrap{
+  position:absolute;
+  left:50%;
+  transform:translateX(-50%);
+  width:min(600px, calc(100% - 520px));
+  display:flex;
+  justify-content:center;
+}
+
+.search-input{
+  width:100%;
+  max-width:600px;
+  padding:12px 14px;
+  border-radius:10px;
+  border:1px solid var(--field-border);
+  font-family:'Montserrat',sans-serif;
+  font-weight:400;
+  font-size:13px;
+  background:#fff;
+  outline:none;
+  box-shadow:none;
+}
+
+.search-input:focus{
+  outline:none;
+  box-shadow:none;
+}
+
+.table-wrap{
+  width:100%;
+  overflow-x:auto;
+  overflow-y:hidden;
+}
+
+.table-wrap::-webkit-scrollbar{ height:10px; }
+.table-wrap::-webkit-scrollbar-thumb{ background:rgba(0,0,0,0.14); border-radius:999px; }
+.table-wrap::-webkit-scrollbar-track{ background:rgba(0,0,0,0.04); border-radius:999px; }
+
+table{
+  width:100%;
+  border-collapse:collapse;
+  table-layout:fixed;
+  min-width:calc(var(--w-id) + var(--w-sn) + var(--w-type) + var(--w-status) + var(--w-note) + var(--w-name-min) + var(--w-action));
+}
+
+thead th{
+  padding:12px;
+  font-size:11px;
+  text-transform:uppercase;
+  color:rgba(3,46,63,0.5);
+  border-bottom:1px solid rgba(0,0,0,0.1);
+  text-align:left;
+  white-space:nowrap;
+  font-weight:600;
+}
+
+tbody td{
+  padding:12px;
+  border-bottom:1px solid rgba(0,0,0,0.05);
+  vertical-align:middle;
+  font-weight:400;
+}
+
+tbody tr:nth-child(even){background:#f7fafc;}
+tbody tr:nth-child(odd){background:#e7f0f9;}
+
+th.col-id, td.col-id{width:var(--w-id);}
+th.col-sn, td.col-sn{width:var(--w-sn);}
+th.col-type, td.col-type{width:var(--w-type);}
+th.col-status, td.col-status{width:var(--w-status);}
+th.col-note, td.col-note{width:var(--w-note);}
+th.col-action, td.col-action{width:var(--w-action);}
+
+th.col-name, td.col-name{
+  width:auto;
+  min-width:var(--w-name-min);
+}
+
+input{
+  width:100%;
+  padding:10px;
+  border-radius:10px;
+  border:1px solid var(--field-border);
+  font-family:'Montserrat',sans-serif;
+  font-weight:400;
+  font-size:13px;
+  background:#fff;
+  outline:none;
+  box-shadow:none;
+}
+input:focus{ outline:none; box-shadow:none; }
+
+.locked{
+  background:transparent;
+  border:0 !important;
+  padding:0 !important;
+  border-radius:0 !important;
+  box-shadow:none !important;
+  outline:none !important;
+  color:rgba(3,46,63,0.95);
+  cursor:default;
+  pointer-events:none;
+  user-select:none;
+  height:auto;
+  line-height:1.25;
+}
+
+.dropdown{
+  position:relative;
+  width:100%;
+}
+
+.no-select,
+.no-select *{
+  user-select:none !important;
+  -webkit-user-select:none !important;
+  -ms-user-select:none !important;
+}
+.no-select::selection{ background:transparent; }
+.no-select *::selection{ background:transparent; }
+.no-select::-moz-selection{ background:transparent; }
+.no-select *::-moz-selection{ background:transparent; }
+
+.dropdown-selected{
+  width:100%;
+  padding:10px 34px 10px 10px;
+  border-radius:10px;
+  border:1px solid var(--field-border);
+  background:#fff;
+  display:flex;
+  align-items:center;
+  justify-content:flex-start;
+  font-size:13px;
+  font-weight:400;
+  white-space:nowrap;
+  overflow:hidden;
+  text-overflow:ellipsis;
+  outline:none;
+}
+
+.dropdown-selected::after{
+  content:"▾";
+  position:absolute;
+  right:12px;
+  top:50%;
+  transform:translateY(-50%);
+  font-size:12px;
+  opacity:0.65;
+  pointer-events:none;
+}
+
+.dropdown-menu{
+  position:absolute;
+  top:calc(100% + 8px);
+  left:0;
+  width:100%;
+  background:#fff;
+  border-radius:10px;
+  box-shadow:var(--shadow);
+  overflow:hidden;
+  display:none;
+  z-index:999999;
+  border:1px solid rgba(0,0,0,0.08);
+}
+
+.dropdown.open .dropdown-menu{ display:block; }
+
+.dropdown-item{
+  padding:10px 12px;
+  text-align:center;
+  cursor:pointer;
+  font-size:13px;
+  font-weight:400;
+  user-select:none;
+}
+
+.dropdown-item:hover{
+  background:#2a67c1;
+  color:#fff;
+}
+
+.dropdown.disabled .dropdown-selected{
+  background:transparent;
+  border:0;
+  padding:0;
+  border-radius:0;
+  color:rgba(3,46,63,0.95);
+  cursor:default;
+}
+.dropdown.disabled .dropdown-selected::after{ content:""; }
+.dropdown.disabled .dropdown-menu{ display:none !important; }
+
+.status-feas{ background:var(--status-feas) !important; }
+.status-devel{ background:var(--status-devel) !important; }
+.status-customer{ background:var(--status-onsite) !important; }
+.status-loaned{ background:var(--status-loaned) !important; }
+
+.btn{
+  padding:12px 14px;
+  border:none;
+  border-radius:10px;
+  cursor:pointer;
+  font-weight:600;
+  white-space:nowrap;
+  font-family:'Montserrat',sans-serif;
+}
+
+.btn-admin{background:var(--accent);color:#fff;}
+.btn-add{background:var(--accent);color:#fff;margin-top:12px;}
+.btn-del{background:#e06666;color:#fff;}
+
+.admin-only{display:none;}
+.admin-action{display:none;}
+.edit-mode .admin-only{display:block;}
+.edit-mode .admin-action{display:table-cell;}
+
+.dropdown:not(.disabled) .dropdown-selected{ cursor:pointer; }
+
+td.col-name .locked{ white-space:normal; }
+
+.col-note input{
+  padding:10px 12px;
+}
+
+.dropdown-menu.portal{
+  position:fixed !important;
+  display:block !important;
+  z-index:9999999 !important;
+}
+
+.modal-overlay{
+  position:fixed;
+  inset:0;
+  background:rgba(0,0,0,0.42);
+  display:none;
+  align-items:center;
+  justify-content:center;
+  z-index:10000000;
+  padding:20px;
+}
+
+.modal-overlay.show{
+  display:flex;
+}
+
+.modal-box{
+  width:min(520px, 100%);
+  background:#fff;
+  border-radius:18px;
+  box-shadow:0 20px 40px rgba(0,0,0,0.28);
+  padding:24px;
+}
+
+.modal-title{
+  margin:0 0 10px 0;
+  font-size:20px;
+  font-weight:600;
+  color:rgba(3,46,63,0.95);
+}
+
+.modal-text{
+  margin:0 0 14px 0;
+  font-size:14px;
+  line-height:1.5;
+  color:rgba(3,46,63,0.9);
+}
+
+.modal-footnote{
+  margin:0 0 18px 0;
+  font-size:12px;
+  line-height:1.45;
+  color:rgba(3,46,63,0.65);
+}
+
+.modal-countdown{
+  margin:0 0 18px 0;
+  font-size:13px;
+  font-weight:500;
+  color:rgba(3,46,63,0.8);
+}
+
+.modal-actions{
+  display:flex;
+  gap:10px;
+  justify-content:flex-end;
+  flex-wrap:wrap;
+}
+
+.btn-secondary{
+  background:#e9eef3;
+  color:rgba(3,46,63,0.9);
+}
+
+@media(max-width:900px){
+  .header-flex{
+    display:grid;
+    grid-template-columns:1fr;
+  }
+
+  .search-wrap{
+    position:static;
+    left:auto;
+    transform:none;
+    width:100%;
+  }
+
+  .header-actions,
+  .search-wrap{
+    justify-content:flex-start;
+  }
+}
+
+@media(max-width:720px){
+  body{ padding:16px; }
+  .container{ padding:18px; }
+}
+</style>
+</head>
+
+<body>
+
+<div class="container" id="mainContainer">
+
+  <div class="header-flex">
+    <h2>Equipment Log</h2>
+
+    <div class="search-wrap">
+      <input
+        id="searchInput"
+        class="search-input"
+        type="text"
+        placeholder="Search ID, Item Name, Serial/Part No., Type, Status or Note..."
+        oninput="handleSearch(this.value)">
+    </div>
+
+    <div class="header-actions">
+      <button id="loginBtn" class="btn btn-admin" onclick="adminLogin()">EDIT MODE</button>
+      <button id="logoutBtn" class="btn btn-admin" onclick="adminSaveAndExit()" style="display:none;">SAVE AND EXIT</button>
+    </div>
+  </div>
+
+  <div class="table-wrap" id="tableWrap">
+    <table>
+      <thead>
+        <tr>
+          <th class="col-id">ID</th>
+          <th class="col-name">ITEM NAME</th>
+          <th class="col-sn">SERIAL / PART NO.</th>
+          <th class="col-type">TYPE</th>
+          <th class="col-status">STATUS</th>
+          <th class="col-note">NOTE</th>
+          <th class="admin-action col-action">Action</th>
+        </tr>
+      </thead>
+      <tbody id="tableBody"></tbody>
+    </table>
+  </div>
+
+  <div class="admin-only">
+    <button class="btn btn-add" onclick="addRow()">+ Add New Entry</button>
+  </div>
+
+</div>
+
+<div id="adminTimeoutModal" class="modal-overlay">
+  <div class="modal-box">
+    <h3 class="modal-title">Are you still working on editing the log?</h3>
+    <p class="modal-text">
+      Your admin editing session is about to expire.
+    </p>
+    <p class="modal-footnote">
+      All unsaved changes will be lost if you close admin mode without pressing SAVE AND EXIT.
+    </p>
+    <p id="adminTimeoutCountdown" class="modal-countdown"></p>
+    <div class="modal-actions">
+      <button class="btn btn-secondary" onclick="handleAdminTimeoutNo()">No</button>
+      <button class="btn btn-admin" onclick="handleAdminTimeoutYes()">Yes</button>
+    </div>
+  </div>
+</div>
+
+<script>
+let isAdmin = false;
+let inventoryData = [];
+let adminDraftData = null;
+let searchQuery = "";
+
+const TYPES = ["Camera", "Lens", "Cable", "Adapter", "Module/Block", "Light"];
+
+const STATUSES = [
+  {value:"Feasibility",label:"Feasibility",cls:"status-feas"},
+  {value:"Development",label:"Development",cls:"status-devel"},
+  {value:"On Site",label:"On Site",cls:"status-customer"},
+  {value:"Loaned",label:"Loaned",cls:"status-loaned"}
+];
+
+let editorToken = sessionStorage.getItem("equipment_log_editor_token");
+if(!editorToken){
+  editorToken = (crypto.randomUUID ? crypto.randomUUID() : String(Math.random()));
+  sessionStorage.setItem("equipment_log_editor_token", editorToken);
+}
+
+const ADMIN_SESSION_MS = 10 * 60 * 1000;
+const ADMIN_PROMPT_RESPONSE_MS = 60 * 1000;
+let adminSessionTimer = null;
+let adminPromptTimer = null;
+let adminCountdownInterval = null;
+let adminPromptDeadline = 0;
+
+function deepCopy(data){
+  return JSON.parse(JSON.stringify(data));
+}
+
+async function apiGetInventory(){
+  const res = await fetch('/api/inventory', { cache:'no-store' });
+  if(!res.ok) throw new Error('Failed to load inventory');
+  return await res.json();
+}
+
+async function loadLiveInventory(){
+  const data = await apiGetInventory();
+  inventoryData = Array.isArray(data.items) ? data.items : [];
+  return data;
+}
+
+async function apiAdminAuth(username, password){
+  const res = await fetch('/api/admin-auth', {
+    method:'POST',
+    headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({ username, password })
+  });
+
+  if(!res.ok){
+    return { ok:false };
+  }
+
+  return await res.json();
+}
+
+async function apiAcquireLock(mode = "normal"){
+  const res = await fetch('/api/lock', {
+    method:'POST',
+    headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({ token: editorToken, mode })
+  });
+
+  if(res.status === 423){
+    return await res.json();
+  }
+
+  return await res.json();
+}
+
+async function apiReleaseLock(){
+  await fetch('/api/lock', {
+    method:'DELETE',
+    headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({ token: editorToken })
+  });
+}
+
+async function apiSaveItems(items){
+  const res = await fetch('/api/inventory', {
+    method:'PUT',
+    headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({ token: editorToken, items })
+  });
+
+  if(res.status === 423){
+    const data = await res.json();
+    return data;
+  }
+
+  return await res.json();
+}
+
+function handleSearch(value){
+  searchQuery = String(value || "").trim().toLowerCase();
+  renderTable();
+}
+
+function matchesSearch(item){
+  if(!searchQuery) return true;
+
+  const id = String(item.id || "").toLowerCase();
+  const name = String(item.name || "").toLowerCase();
+  const sn = String(item.sn || "").toLowerCase();
+  const type = String(item.type || "").toLowerCase();
+  const status = String(item.status || "").toLowerCase();
+  const note = String(item.note || "").toLowerCase();
+
+  return (
+    id.includes(searchQuery) ||
+    name.includes(searchQuery) ||
+    sn.includes(searchQuery) ||
+    type.includes(searchQuery) ||
+    status.includes(searchQuery) ||
+    note.includes(searchQuery)
+  );
+}
+
+function getNextId(){
+  const source = isAdmin && adminDraftData ? adminDraftData : inventoryData;
+
+  const usedNumbers = source
+    .map(item => String(item.id || '').match(/^ITEM-(\d{3})$/))
+    .filter(Boolean)
+    .map(match => Number(match[1]))
+    .filter(num => Number.isInteger(num) && num >= 1 && num <= 999);
+
+  let next = 1;
+  while(usedNumbers.includes(next) && next <= 999){
+    next++;
+  }
+
+  if(next > 999){
+    return null;
+  }
+
+  return `ITEM-${String(next).padStart(3, '0')}`;
+}
+
+const Portal = {
+  menu: null,
+  owner: null
+};
+
+function portalClose(){
+  if(!Portal.menu) return;
+
+  Portal.menu.classList.remove('portal');
+  Portal.menu.style.left = '';
+  Portal.menu.style.top = '';
+  Portal.menu.style.width = '';
+  Portal.menu.style.visibility = '';
+  Portal.menu.style.display = '';
+
+  if(Portal.owner && Portal.owner.isConnected){
+    Portal.owner.appendChild(Portal.menu);
+  }
+
+  Portal.menu = null;
+  Portal.owner = null;
+
+  document.querySelectorAll(".dropdown").forEach(d => d.classList.remove("open"));
+}
+
+function portalOpen(dropdown){
+  portalClose();
+
+  const menu = dropdown.querySelector('.dropdown-menu');
+  if(!menu) return;
+
+  const btn = dropdown.querySelector('.dropdown-selected');
+  const btnRect = btn.getBoundingClientRect();
+
+  Portal.menu = menu;
+  Portal.owner = dropdown;
+
+  document.body.appendChild(menu);
+  menu.classList.add('portal');
+
+  const prevVis = menu.style.visibility;
+  const prevDisp = menu.style.display;
+
+  menu.style.visibility = 'hidden';
+  menu.style.display = 'block';
+
+  const menuRect = menu.getBoundingClientRect();
+  const gap = 8;
+  const buffer = 12;
+
+  let top = btnRect.bottom + gap;
+  let left = btnRect.left;
+  let width = btnRect.width;
+
+  if(top + menuRect.height > window.innerHeight - buffer){
+    top = btnRect.top - gap - menuRect.height;
+  }
+
+  menu.style.left = `${left}px`;
+  menu.style.top = `${top}px`;
+  menu.style.width = `${width}px`;
+
+  menu.style.visibility = prevVis || 'visible';
+  menu.style.display = prevDisp || 'block';
+
+  dropdown.classList.add('open');
+}
+
+function clearAdminTimers(){
+  if(adminSessionTimer){
+    clearTimeout(adminSessionTimer);
+    adminSessionTimer = null;
+  }
+  if(adminPromptTimer){
+    clearTimeout(adminPromptTimer);
+    adminPromptTimer = null;
+  }
+  if(adminCountdownInterval){
+    clearInterval(adminCountdownInterval);
+    adminCountdownInterval = null;
+  }
+}
+
+function startAdminSessionTimer(){
+  if(!isAdmin) return;
+  clearAdminTimers();
+  adminSessionTimer = setTimeout(showAdminTimeoutPrompt, ADMIN_SESSION_MS);
+}
+
+function updateAdminCountdownText(){
+  const el = document.getElementById('adminTimeoutCountdown');
+  if(!el) return;
+
+  const remainingMs = Math.max(0, adminPromptDeadline - Date.now());
+  const seconds = Math.ceil(remainingMs / 1000);
+  el.textContent = `This message will auto-close admin mode in ${seconds} second${seconds === 1 ? '' : 's'} if there is no response.`;
+}
+
+function showAdminTimeoutPrompt(){
+  if(!isAdmin) return;
+
+  const modal = document.getElementById('adminTimeoutModal');
+  modal.classList.add('show');
+
+  adminPromptDeadline = Date.now() + ADMIN_PROMPT_RESPONSE_MS;
+  updateAdminCountdownText();
+
+  adminCountdownInterval = setInterval(updateAdminCountdownText, 250);
+  adminPromptTimer = setTimeout(() => {
+    forceCloseAdminWithoutSaving();
+  }, ADMIN_PROMPT_RESPONSE_MS);
+}
+
+function hideAdminTimeoutPrompt(){
+  const modal = document.getElementById('adminTimeoutModal');
+  modal.classList.remove('show');
+
+  if(adminPromptTimer){
+    clearTimeout(adminPromptTimer);
+    adminPromptTimer = null;
+  }
+
+  if(adminCountdownInterval){
+    clearInterval(adminCountdownInterval);
+    adminCountdownInterval = null;
+  }
+}
+
+function handleAdminTimeoutYes(){
+  hideAdminTimeoutPrompt();
+  startAdminSessionTimer();
+}
+
+async function handleAdminTimeoutNo(){
+  hideAdminTimeoutPrompt();
+
+  const confirmed = confirm(
+    "All unsaved changes will be lost and will not be saved.\n\nAre you sure you want to close admin mode?"
+  );
+
+  if(confirmed){
+    await forceCloseAdminWithoutSaving();
+  }else{
+    startAdminSessionTimer();
+  }
+}
+
+async function forceCloseAdminWithoutSaving(){
+  hideAdminTimeoutPrompt();
+  clearAdminTimers();
+
+  if(isAdmin){
+    await apiReleaseLock();
+  }
+
+  adminDraftData = null;
+  isAdmin = false;
+
+  document.getElementById('mainContainer').classList.remove('edit-mode');
+  document.getElementById('loginBtn').style.display='inline-block';
+  document.getElementById('logoutBtn').style.display='none';
+
+  await loadLiveInventory();
+  renderTable();
+
+  alert("Admin mode has been closed. Unsaved changes were discarded.");
+}
+
+async function adminLogin(){
+  const username = prompt("Username:") || "";
+  const password = prompt("Password:") || "";
+
+  const auth = await apiAdminAuth(username, password);
+  if(!auth.ok){
+    alert("Access denied.");
+    return;
+  }
+
+  const lock = await apiAcquireLock("admin");
+  if(!lock.ok){
+    alert("Another admin session is active.");
+    return;
+  }
+
+  await loadLiveInventory();
+  adminDraftData = deepCopy(inventoryData);
+
+  isAdmin = true;
+  document.getElementById('mainContainer').classList.add('edit-mode');
+  document.getElementById('loginBtn').style.display='none';
+  document.getElementById('logoutBtn').style.display='inline-block';
+
+  startAdminSessionTimer();
+  renderTable();
+}
+
+async function adminSaveAndExit(){
+  if(!adminDraftData){
+    await apiReleaseLock();
+    clearAdminTimers();
+    hideAdminTimeoutPrompt();
+    adminLogout();
+    return;
+  }
+
+  const saveResult = await apiSaveItems(adminDraftData);
+  if(!saveResult.ok){
+    alert("Save failed because the editing lock is no longer valid.");
+    return;
+  }
+
+  await apiReleaseLock();
+  clearAdminTimers();
+  hideAdminTimeoutPrompt();
+
+  adminDraftData = null;
+  await loadLiveInventory();
+  adminLogout(false);
+}
+
+function adminLogout(reloadLive = true){
+  isAdmin = false;
+  adminDraftData = null;
+  clearAdminTimers();
+  hideAdminTimeoutPrompt();
+
+  document.getElementById('mainContainer').classList.remove('edit-mode');
+  document.getElementById('loginBtn').style.display='inline-block';
+  document.getElementById('logoutBtn').style.display='none';
+
+  if(reloadLive){
+    loadLiveInventory()
+      .then(() => renderTable())
+      .catch(() => renderTable());
+  }else{
+    renderTable();
+  }
+}
+
+async function addRow(){
+  if(!isAdmin || !adminDraftData) return;
+
+  const nextId = getNextId();
+  if(!nextId){
+    alert("Maximum number of IDs reached (ITEM-999).");
+    return;
+  }
+
+  adminDraftData.push({
+    id: nextId,
+    name:'',
+    sn:'',
+    type:'Camera',
+    status:'Feasibility',
+    note:''
+  });
+
+  renderTable();
+}
+
+async function deleteRow(i){
+  if(!isAdmin || !adminDraftData) return;
+
+  if(confirm("Delete item?")){
+    adminDraftData.splice(i, 1);
+    renderTable();
+  }
+}
+
+function updateTextField(i, field, value){
+  if(!isAdmin || !adminDraftData) return;
+  adminDraftData[i][field] = value;
+}
+
+function updateNoteFieldDraft(i, value){
+  if(!isAdmin || !adminDraftData) return;
+  adminDraftData[i].note = value;
+}
+
+async function saveNoteOnEnter(event, i, inputEl){
+  if(isAdmin) return;
+  if(event.key !== "Enter") return;
+
+  event.preventDefault();
+
+  const live = await apiGetInventory();
+
+  if(live.lock && live.lock.active && live.lock.mode === "admin"){
+    alert("An admin session is currently active.");
+    await loadLiveInventory();
+    renderTable();
+    return;
+  }
+
+  const lock = await apiAcquireLock("normal");
+  if(!lock.ok){
+    if(lock.mode === "admin"){
+      alert("An admin session is currently active.");
+    }else{
+      alert("Another edit is already in progress.");
+    }
+    await loadLiveInventory();
+    renderTable();
+    return;
+  }
+
+  inventoryData[i].note = inputEl.value;
+
+  await apiSaveItems(inventoryData);
+  await apiReleaseLock();
+
+  await loadLiveInventory();
+  renderTable();
+}
+
+async function updateDropdownField(i, field, value){
+  if(isAdmin){
+    if(!adminDraftData) return;
+    if(field === 'type' || field === 'status'){
+      adminDraftData[i][field] = value;
+      renderTable();
+    }
+    return;
+  }
+
+  if(field !== 'status') return;
+
+  const live = await apiGetInventory();
+
+  if(live.lock && live.lock.active && live.lock.mode === "admin"){
+    alert("An admin session is currently active.");
+    await loadLiveInventory();
+    renderTable();
+    return;
+  }
+
+  const lock = await apiAcquireLock("normal");
+  if(!lock.ok){
+    if(lock.mode === "admin"){
+      alert("An admin session is currently active.");
+    }else{
+      alert("Another edit is already in progress.");
+    }
+    await loadLiveInventory();
+    renderTable();
+    return;
+  }
+
+  inventoryData[i][field] = value;
+
+  const saveResult = await apiSaveItems(inventoryData);
+  if(saveResult.ok){
+    await loadLiveInventory();
+  }
+
+  await apiReleaseLock();
+  renderTable();
+}
+
+function statusMeta(statusValue){
+  return STATUSES.find(s => s.value === statusValue) || null;
+}
+
+function buildDropdown({kind, valueText, buttonClass, itemsHtml, disabled}){
+  const disabledClass = disabled ? ' disabled' : '';
+  const noSelectClass = (!isAdmin) ? ' no-select' : '';
+  return `
+    <div class="dropdown ${kind}${disabledClass}${noSelectClass}">
+      <div class="dropdown-selected ${buttonClass || ''}">${valueText}</div>
+      <div class="dropdown-menu">${itemsHtml}</div>
+    </div>
+  `;
+}
+
+function renderTable(){
+  portalClose();
+
+  const tbody = document.getElementById('tableBody');
+  tbody.innerHTML = '';
+
+  const sourceData = isAdmin && adminDraftData ? adminDraftData : inventoryData;
+
+  sourceData.forEach((item, i) => {
+    if(!matchesSearch(item)) return;
+
+    const row = document.createElement('tr');
+
+    const typeItems = TYPES.map(t => `
+      <div class="dropdown-item" data-index="${i}" data-field="type" data-value="${t}">${t}</div>
+    `).join('');
+
+    const typeDropdown = buildDropdown({
+      kind:'type',
+      valueText:item.type || 'Camera',
+      itemsHtml:typeItems,
+      disabled:!isAdmin
+    });
+
+    const meta = statusMeta(item.status);
+
+    const statusItems = STATUSES.map(s => `
+      <div class="dropdown-item" data-index="${i}" data-field="status" data-value="${s.value}">${s.label}</div>
+    `).join('');
+
+    const statusDropdown = buildDropdown({
+      kind:'status',
+      valueText:meta ? meta.label : item.status,
+      buttonClass:meta ? meta.cls : '',
+      itemsHtml:statusItems,
+      disabled:false
+    });
+
+    row.innerHTML = `
+      <td class="col-id">
+        <input type="text"
+          value="${item.id || ''}"
+          readonly
+          class="locked">
+      </td>
+
+      <td class="col-name">
+        <input type="text"
+          value="${item.name || ''}"
+          placeholder="Item Description"
+          ${isAdmin ? `oninput="updateTextField(${i},'name',this.value)"` : ''}
+          ${isAdmin ? '' : 'readonly class="locked"'}>
+      </td>
+
+      <td class="col-sn">
+        <input type="text"
+          value="${item.sn || ''}"
+          placeholder="Serial or Part No."
+          ${isAdmin ? `oninput="updateTextField(${i},'sn',this.value)"` : ''}
+          ${isAdmin ? '' : 'readonly class="locked"'}>
+      </td>
+
+      <td class="col-type">${typeDropdown}</td>
+      <td class="col-status">${statusDropdown}</td>
+
+      <td class="col-note">
+        <input type="text"
+          value="${item.note || ''}"
+          placeholder="${isAdmin ? 'Note' : 'Type and press ENTER to save'}"
+          ${isAdmin
+            ? `oninput="updateNoteFieldDraft(${i},this.value)"`
+            : `onkeydown="saveNoteOnEnter(event,${i},this)"`
+          }>
+      </td>
+
+      <td class="admin-action col-action" style="text-align:center;">
+        <button class="btn btn-del" onclick="deleteRow(${i})">Delete</button>
+      </td>
+    `;
+
+    tbody.appendChild(row);
+  });
+
+  initDropdowns();
+}
+
+function initDropdowns(){
+  document.addEventListener("click", portalClose, { once:true });
+
+  const wrap = document.getElementById('tableWrap');
+  if(wrap){
+    wrap.addEventListener("scroll", portalClose, { passive:true });
+  }
+
+  window.addEventListener("scroll", portalClose, { once:true });
+  window.addEventListener("resize", portalClose, { once:true });
+
+  document.querySelectorAll(".dropdown").forEach(d => {
+    const btn = d.querySelector(".dropdown-selected");
+    btn.onclick = (e) => {
+      e.stopPropagation();
+      if(d.classList.contains("disabled")) return;
+
+      if(Portal.owner === d){
+        portalClose();
+      }else{
+        portalOpen(d);
+      }
+    };
+  });
+
+  document.querySelectorAll(".dropdown-item").forEach(opt => {
+    opt.onclick = async (e) => {
+      e.stopPropagation();
+
+      const index = Number(opt.dataset.index);
+      const field = opt.dataset.field;
+      const value = opt.dataset.value;
+
+      portalClose();
+      await updateDropdownField(index, field, value);
+    };
+  });
+
+  if(!isAdmin){
+    document.querySelectorAll(".dropdown").forEach(d => {
+      d.onmousedown = (e) => { e.preventDefault(); };
+    });
+  }else{
+    document.querySelectorAll(".dropdown").forEach(d => {
+      d.onmousedown = null;
+    });
+  }
+}
+
+window.onload = async () => {
+  try{
+    await loadLiveInventory();
+    renderTable();
+  }catch(err){
+    alert("Cannot reach the server API. Make sure the backend server is running.");
+    inventoryData = [];
+    renderTable();
+  }
+};
+</script>
+
+</body>
+</html>
