@@ -39,30 +39,30 @@ Other libraries:
 
 ---
 
-# Project Structure
+# Project structure
 
-
+```text
 .
 ├── server.py
 ├── requirements.txt
 ├── .env.example
 ├── .gitignore
-├── LICENSE
 ├── README.md
 └── app/
-└── index.html
+    ├── index.html
+```
 
 
 Runtime directories (created automatically when the server runs):
 
-
+```text
 app/
 └── data/
 ├── inventory.json
 ├── backups/
 └── hourly_backups/
 
-
+```
 ---
 
 # Requirements
@@ -77,7 +77,7 @@ app/
 Clone the repository:
 
 
-git clone https://github.com/your-username/equipment-log.git
+git clone https://github.com/RNYR/LogApp.git
 
 
 Enter the project directory:
