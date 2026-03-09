@@ -1,10 +1,10 @@
 # Equipment Log
 
-A lightweight web-based equipment inventory log built with a simple HTML/CSS/JavaScript frontend and a Python Flask backend.
+A lightweight web-based equipment inventory log built with a simple **HTML/CSS/JavaScript frontend** and a **Python Flask backend**.
 
 The application provides a clean interface for tracking equipment items, updating their status, adding notes, and managing the inventory through an admin edit mode.
 
-This project is designed for small internal setups or as a starting point for a more advanced inventory management tool.
+This project is intended for small internal deployments or as a starting point for a more advanced inventory management tool.
 
 ---
 
@@ -47,12 +47,13 @@ Other libraries:
 ├── requirements.txt
 ├── .env.example
 ├── .gitignore
+├── LICENSE
 ├── README.md
 └── app/
 └── index.html
 
 
-Optional runtime folders created automatically:
+Runtime directories (created automatically when the server runs):
 
 
 app/
@@ -66,7 +67,7 @@ app/
 
 # Requirements
 
-- Python 3.10+
+- Python **3.10+**
 - pip
 
 ---
@@ -135,23 +136,21 @@ http://localhost:8787
 
 # How the Application Works
 
-The Flask backend serves a single-page frontend and provides API endpoints for managing the inventory data.
+The Flask backend serves a single-page frontend and provides API endpoints for managing inventory data.
 
-Inventory data is stored in a JSON file and automatically backed up when changes are saved.
+Inventory information is stored in a JSON file and automatically backed up whenever changes are saved.
 
 Two usage modes exist:
 
 ### Normal Mode
 
 Users can:
-
 - change equipment status
 - update item notes
 
 ### Admin Mode
 
 Admin users can:
-
 - add new entries
 - edit item name
 - edit serial/part number
@@ -217,9 +216,9 @@ For larger deployments you may want to extend it with:
 
 The application can be run as a background service using tools such as **NSSM**.
 
-Typical steps:
+Typical setup:
 
-1. Install Python and dependencies
+1. Install Python and project dependencies
 2. Configure environment variables for admin credentials
 3. Create an NSSM service pointing to Python
 4. Use `server.py` as the startup script
@@ -256,24 +255,6 @@ Before publishing this project or deploying it publicly:
 
 # License
 
-MIT License
+This project is licensed under the **MIT License**.
 
-Copyright (c) 2026 David Žitník
-
-Permission is hereby granted, free of charge, to any person obtaining a copy
-of this software and associated documentation files (the "Software"), to deal
-in the Software without restriction, including without limitation the rights
-to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-copies of the Software, and to permit persons to whom the Software is
-furnished to do so, subject to the following conditions:
-
-The above copyright notice and this permission notice shall be included in all
-copies or substantial portions of the Software.
-
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-SOFTWARE.
+See the `LICENSE` file for details.
