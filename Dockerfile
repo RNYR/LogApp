@@ -25,7 +25,7 @@
 # -----------------------------------------------------------------------------
 # Stage 1 — single-page application
 # -----------------------------------------------------------------------------
-FROM node:22-alpine AS web
+FROM --platform=$BUILDPLATFORM node:22-alpine AS web
 
 WORKDIR /src/web
 

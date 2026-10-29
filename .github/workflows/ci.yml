@@ -192,11 +192,11 @@ jobs:
           base="https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}"
           asset="gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz"
 
-          curl -sSfL --connect-timeout 10 --max-time 60 "$base/$asset" -o /tmp/gitleaks.tar.gz
+          curl -sSfL --connect-timeout 10 --max-time 60 "$base/$asset" -o "/tmp/$asset"
           curl -sSfL --connect-timeout 10 --max-time 60 "$base/gitleaks_${GITLEAKS_VERSION}_checksums.txt" -o /tmp/gitleaks.sums
           ( cd /tmp && grep " $asset\$" gitleaks.sums | sha256sum -c - )
 
-          tar -xzf /tmp/gitleaks.tar.gz -C "$RUNNER_TEMP" gitleaks
+          tar -xzf "/tmp/$asset" -C "$RUNNER_TEMP" gitleaks
           echo "$RUNNER_TEMP" >> "$GITHUB_PATH"
           gitleaks version
 
@@ -261,7 +261,9 @@ jobs:
           PY
 
       - name: Validate the Avahi service file (XML)
-        run: xmllint --noout deploy/avahi/sklad.service
+        run: |
+          sudo apt-get update -qq && sudo apt-get install -y -qq libxml2-utils
+          xmllint --noout deploy/avahi/sklad.service
 
       - name: Generate throwaway certificates
         run: ./scripts/make-certs --out .ci-certs --hosts sklad.local,sklad --ips 127.0.0.1
