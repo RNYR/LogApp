@@ -5,6 +5,21 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.0.1] - 2026-10-29
+
+Build and CI fixes only; the application is unchanged from 2.0.0.
+
+### Fixed
+
+- **Fresh checkouts compile:** `web/dist/.gitkeep` is committed, so
+  `//go:embed all:dist` no longer fails before the SPA has been built.
+- **Multi-arch image:** the web build stage runs on the build platform
+  (`FROM --platform=$BUILDPLATFORM`), so the arm64 image no longer dies with
+  SIGILL in `npm ci` under QEMU.
+- **CI:** gitleaks install (checksum file name, version check by full path),
+  `xmllint` installed for the deployment-config job, and the rental e2e test
+  matches the "Save selected (N)" label. All six CI jobs pass.
+
 ## [2.0.0] - 2026-10-29
 
 **Sklad 2.0** replaces LogApp 1.x (the Python/Flask app with JSON-file storage

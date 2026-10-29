@@ -45,7 +45,7 @@ access working on laptops, Android, and iOS.
   append-only migrations, and scheduled consistent `VACUUM INTO` database backups.
 - 🧭 **mDNS** — discoverable as `sklad.local` on the local network.
 
-> **Version 2.0.0.** The architecture, API, schema and i18n contracts are frozen
+> **Version 2.0.1.** The architecture, API, schema and i18n contracts are frozen
 > in [docs/contracts](docs/contracts) and [openapi/openapi.yaml](openapi/openapi.yaml);
 > the implementation is complete and covered by Go + frontend test suites and CI
 > (see [.github/workflows/ci.yml](.github/workflows/ci.yml)).
