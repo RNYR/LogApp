@@ -1,0 +1,96 @@
+import { test, expect, type APIRequestContext } from '@playwright/test'
+// Uses a real isolated Go backend started by npm run test:rentals; no API mocks.
+let csrf = ''
+async function admin(request:APIRequestContext) {
+ let response=await request.post('/api/v1/auth/login',{data:{username:'admin',password:'rental-integration-ready'}})
+ if(!response.ok()) response=await request.post('/api/v1/auth/login',{data:{username:'admin',password:'rental-integration-pass'}})
+ expect(response.ok()).toBeTruthy();const session=(await response.json()).data;csrf=session.csrf_token
+ if(session.user.must_change_password){expect((await request.post('/api/v1/auth/change-password',{headers:{'X-CSRF-Token':csrf},data:{current_password:'rental-integration-pass',new_password:'rental-integration-ready'}})).ok()).toBeTruthy()}
+}
+async function post(request:APIRequestContext,path:string,data:unknown){const res=await request.post('/api/v1'+path,{headers:{'X-CSRF-Token':csrf},data});expect(res.ok(),await res.text()).toBeTruthy();return (await res.json()).data}
+test.beforeEach(async({page,request})=>{
+ await page.addInitScript(()=>localStorage.setItem('sklad.lang','en'))
+ await admin(request)
+ const options=(await (await request.get('/api/v1/options')).json()).data
+ if(!options.statuses.some((s:{value:string})=>s.value==='Loaned')){options.statuses.push({value:'Loaned',label:'Loaned',labels:{en:'Loaned'},color:'#cc9933'});expect((await request.put('/api/v1/options',{headers:{'X-CSRF-Token':csrf},data:options})).ok()).toBeTruthy()}
+})
+test('public selection, shared scan buffer, validation, bulk and individual rental writes',async({page,request})=>{
+ const one=await post(request,'/items',{name:'Rental one'});const two=await post(request,'/items',{name:'Rental two'})
+ const person=await post(request,'/personnel',{name:'Test colleague'})
+ await page.goto('/')
+ await expect(page.getByRole('button',{name:'+ Add new entry'})).toHaveCount(0)
+ await expect(page.locator('aside nav a')).toHaveCount(3)
+ await page.getByRole('checkbox',{name:`Select ${one.asset_tag}`,exact:true}).check()
+ const buffer=page.getByRole('region',{name:'Rental buffer'})
+ // Card is a section with an accessible name.
+ await expect(buffer.getByLabel('Sent')).toBeDisabled()
+ await expect(buffer.getByLabel('Status',{exact:true}).locator('option[value="Feasibility"]')).toHaveCount(0)
+ await buffer.getByRole('button',{name:'Edit individually'}).click()
+ await expect(buffer.locator('option[value="Feasibility"]')).toHaveCount(0)
+ await buffer.getByRole('button',{name:'Apply to all'}).click()
+ await page.getByRole('link',{name:'Scan',exact:true}).click()
+ await page.getByLabel('Enter code manually').fill(two.asset_tag)
+ await page.getByRole('button',{name:'Add to buffer',exact:true}).click()
+ await expect(buffer.getByRole('button',{name:'Save 2 selected items'})).toBeVisible()
+ await page.getByRole('link',{name:'Inventory',exact:true}).click()
+ await expect(page.getByRole('checkbox',{name:`Select ${two.asset_tag}`,exact:true})).toBeChecked()
+ await buffer.getByLabel('Status',{exact:true}).selectOption('Loaned')
+ await expect(buffer.getByLabel('Sent')).toBeEnabled()
+ await buffer.getByRole('button',{name:'Save 2 selected items'}).click()
+ await expect(buffer.getByRole('alert')).toContainText(`${one.asset_tag}: Personnel`)
+ await expect(buffer.getByRole('alert')).toContainText(`${two.asset_tag}: Personnel`)
+ await buffer.getByLabel('Personnel renting the device').selectOption('1')
+ await buffer.getByLabel('Note',{exact:true}).fill('   ')
+ await buffer.getByRole('button',{name:'Save 2 selected items'}).click()
+ await expect(buffer.getByRole('alert')).toContainText('customer’s name')
+ await buffer.getByLabel('Note',{exact:true}).fill('ACME customer')
+ await buffer.getByLabel('Sent',{exact:true}).fill('2026-10-15')
+ await buffer.getByLabel('Return',{exact:true}).fill('2026-10-20')
+ await buffer.getByRole('button',{name:'Save 2 selected items'}).click()
+ await expect(buffer.getByRole('status')).toHaveText('Saved 2 item(s).')
+ await expect(buffer.getByLabel('Status',{exact:true}).locator('option[value="Feasibility"]')).toHaveCount(0)
+ await buffer.getByRole('button',{name:'Edit individually'}).click()
+ const row=buffer.locator('li').filter({hasText:one.asset_tag})
+ await row.getByLabel('Personnel renting the device').selectOption(String(person.id))
+ await row.getByLabel('Note',{exact:true}).fill('Office loan')
+ await row.getByRole('button',{name:`Save ${one.asset_tag}`,exact:true}).click()
+ await expect(buffer.getByRole('status')).toHaveText('Saved 1 item(s).')
+ const saved=(await (await request.get(`/api/v1/items/${one.id}`)).json()).data
+ expect(saved.personnel_id).toBe(person.id);expect(saved.note).toBe('Office loan')
+ await buffer.getByRole('button',{name:`Remove ${one.asset_tag}`,exact:true}).click()
+ await expect(page.getByRole('checkbox',{name:`Select ${one.asset_tag}`,exact:true})).not.toBeChecked()
+ await buffer.getByRole('button',{name:'Clear buffer'}).click()
+ await expect(buffer.getByRole('heading')).toContainText('(0)')
+})
+test('Admin manages personnel and alone confirms return; locked fields preserve history',async({page,request})=>{
+ const suffix=String(Date.now())
+ const person=await post(request,'/personnel',{name:'Return colleague'})
+ const item=await post(request,'/items',{name:'Returning device',status:'Loaned',personnel_id:person.id,note:'Existing rental'})
+ await page.goto('/login');await page.getByLabel('Username',{exact:true}).fill('admin');await page.getByLabel('Password',{exact:true}).fill('rental-integration-ready');await page.getByRole('button',{name:'Admin sign in',exact:true}).click()
+ await page.getByRole('checkbox',{name:`Select ${item.asset_tag}`,exact:true}).check()
+ const buffer=page.getByRole('region',{name:'Rental buffer'})
+ await buffer.getByLabel('Status',{exact:true}).selectOption('Feasibility')
+ for(const label of ['Sent','Return','Note','Personnel renting the device'])await expect(buffer.getByLabel(label,{exact:true})).toBeDisabled()
+ await buffer.getByRole('button',{name:'Save 1 selected items'}).click();await expect(buffer.getByRole('status')).toHaveText('Saved 1 item(s).')
+ const saved=(await (await request.get(`/api/v1/items/${item.id}`)).json()).data;expect(saved.status).toBe('Feasibility');expect(saved.note).toBe('Existing rental')
+ await page.getByRole('link',{name:'Personnel',exact:true}).click()
+ await page.getByLabel('Personnel name').fill('New office person '+suffix);await page.getByRole('button',{name:'Add person',exact:true}).click()
+ const row=page.locator('li').filter({hasText:'New office person '+suffix})
+ await row.getByRole('button',{name:'Edit',exact:true}).click();await page.getByLabel('Personnel name').fill('Renamed office person '+suffix);await page.getByRole('button',{name:'Save',exact:true}).click()
+ await page.locator('li').filter({hasText:'Renamed office person '+suffix}).getByRole('button',{name:'Deactivate',exact:true}).click()
+ await expect(page.locator('li').filter({hasText:'Renamed office person '+suffix})).toContainText('Inactive')
+})
+test('camera decoding adds a known code to the shared buffer and stops cleanly',async({page,request})=>{
+ const item=await post(request,'/items',{name:'Camera-scanned device'})
+ await page.addInitScript((tag)=>{
+  const canvas=document.createElement('canvas');canvas.width=640;canvas.height=480
+  const context=canvas.getContext('2d'); const draw=()=>{context?.fillRect(0,0,640,480);requestAnimationFrame(draw)};draw()
+  const stream=canvas.captureStream(15)
+  Object.defineProperty(navigator,'mediaDevices',{configurable:true,value:{getUserMedia:async()=>stream}})
+  Object.defineProperty(window,'BarcodeDetector',{configurable:true,value:class {static async getSupportedFormats(){return ['code_128']} async detect(){return [{rawValue:tag,format:'code_128'}]}}})
+ },item.asset_tag)
+ await page.goto('/scan');await page.getByRole('button',{name:'Start camera'}).click()
+ await expect(page.getByRole('region',{name:'Rental buffer'})).toContainText(item.asset_tag)
+ await page.getByRole('button',{name:'Stop camera'}).click();await expect(page.getByRole('button',{name:'Start camera'})).toBeVisible()
+ await page.getByRole('link',{name:'Inventory',exact:true}).click();await expect(page.getByRole('checkbox',{name:`Select ${item.asset_tag}`,exact:true})).toBeChecked()
+})

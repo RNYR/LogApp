@@ -1,0 +1,54 @@
+#!/usr/bin/env bash
+# =============================================================================
+# scripts/push-test-to-nas — replace the Sklad TEST stack on the NAS
+#
+#   ./scripts/push-test-to-nas David_Zitnik@10.77.10.2
+#   ./scripts/push-test-to-nas David_Zitnik@10.77.10.2 --keep-data
+#   ./scripts/push-test-to-nas David_Zitnik@10.77.10.2 --no-start
+#   ./scripts/push-test-to-nas David_Zitnik@10.77.10.2 --target /share/Container/sklad-test
+#
+# 1. uploads ./sklad-test to a staging folder next to the target
+# 2. on the NAS (scripts/nas-replace): removes the currently running test
+#    stack — containers, sklad:test image, network and, unless --keep-data, the
+#    test database/CA volumes — replaces the target folder (your .env.test is
+#    kept) and builds + starts the new version.
+#
+# The old equipment-log app and any live stack are never touched. One SSH
+# connection is reused, so you enter the password once. Needs ssh + tar only.
+# Run ./scripts/make-test-bundle first.
+# =============================================================================
+set -euo pipefail
+
+cd "$(dirname "$0")/.."
+
+HOST=
+TARGET=/share/Container/sklad-test
+REPLACE_ARGS=()
+while [ $# -gt 0 ]; do
+	case "$1" in
+		--target) TARGET=$2; shift 2 ;;
+		--keep-data|--no-start) REPLACE_ARGS+=("$1"); shift ;;
+		-h|--help) sed -n '3,20p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+		-*) echo "unknown option $1" >&2; exit 1 ;;
+		*) HOST=$1; shift ;;
+	esac
+done
+
+SRC=sklad-test
+[ -n "$HOST" ] || { echo "usage: $0 <user@nas-ip> [--keep-data] [--no-start] [--target DIR]" >&2; exit 1; }
+[ -f "$SRC/docker-compose.test.yml" ] || { echo "$SRC/ not found: run ./scripts/make-test-bundle first" >&2; exit 1; }
+case "$TARGET" in */) TARGET=${TARGET%/} ;; esac
+INCOMING="$(dirname "$TARGET")/.$(basename "$TARGET")-incoming"
+
+# Reuse one authenticated connection for all steps.
+CTL="$HOME/.ssh/sklad-push-%r@%h:%p"
+mkdir -p "$HOME/.ssh"
+SSH=(ssh -o ControlMaster=auto -o "ControlPath=$CTL" -o ControlPersist=120)
+trap '"${SSH[@]}" -O exit "$HOST" >/dev/null 2>&1 || true' EXIT
+
+echo "== Uploading $SRC/ to $HOST:$INCOMING"
+COPYFILE_DISABLE=1 tar -czf - -C "$SRC" . \
+	| "${SSH[@]}" "$HOST" "rm -rf '$INCOMING' && mkdir -p '$INCOMING' && tar -xzf - -C '$INCOMING'"
+
+echo "== Replacing the test stack at $TARGET"
+"${SSH[@]}" -t "$HOST" "sh '$INCOMING/scripts/nas-replace' --incoming '$INCOMING' --target '$TARGET' ${REPLACE_ARGS[*]:-}"

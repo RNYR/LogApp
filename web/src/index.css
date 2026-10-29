@@ -1,0 +1,203 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    color-scheme: dark;
+    --panel: 24 35 45;
+    --panel-subtle: 32 47 59;
+    --content: 237 242 245;
+    --content-muted: 175 189 200;
+    --stroke: 51 70 83;
+    --action-selected: 40 62 46;
+    --success-fg: 169 223 146; --success-bg: 35 58 45;
+    --warning-fg: 241 203 131; --warning-bg: 58 48 35;
+    --danger-fg: 245 170 167; --danger-bg: 59 37 43;
+    --info-fg: 166 206 232; --info-bg: 32 54 68;
+  }
+
+  html,
+  body,
+  #root {
+    min-height: 100%;
+  }
+
+  body {
+    @apply bg-canvas font-sans text-content antialiased;
+    margin: 0;
+  }
+
+  /* Keep native date/time inputs consistent with the design system. `:where()`
+     zeroes the selector specificity so invalid/focus utility classes still win. */
+  :where(input[type='date'], input[type='datetime-local']) {
+    @apply h-10 w-full rounded-md border border-stroke-control bg-panel px-3 text-sm text-content;
+  }
+
+  :focus-visible {
+    outline: 2px solid theme('colors.action.DEFAULT');
+    outline-offset: 2px;
+  }
+
+  /* Respect the user's motion preference: disable the shared fade-in and all
+     transitions. The loading spinner uses an animation, not a transition, so
+     it keeps spinning. */
+  @media (prefers-reduced-motion: reduce) {
+    .animate-fade-in {
+      animation: none !important;
+    }
+
+    *,
+    *::before,
+    *::after {
+      transition-duration: 0s !important;
+      transition-delay: 0s !important;
+    }
+  }
+}
+
+@font-face { font-family: 'Work Sans'; font-style: normal; font-weight: 400; font-display: swap; src: url('/fonts/work-sans-400.ttf') format('truetype'); }
+@font-face { font-family: 'Work Sans'; font-style: normal; font-weight: 500; font-display: swap; src: url('/fonts/work-sans-500.ttf') format('truetype'); }
+@font-face { font-family: 'Work Sans'; font-style: normal; font-weight: 600; font-display: swap; src: url('/fonts/work-sans-600.ttf') format('truetype'); }
+@font-face { font-family: 'Work Sans'; font-style: normal; font-weight: 700; font-display: swap; src: url('/fonts/work-sans-700.ttf') format('truetype'); }
+
+@layer components {
+  .sklad-shell { display: grid; grid-template-columns: 272px minmax(0, 1fr); }
+  .sklad-sidebar { position: sticky; top: 0; height: 100vh; padding: 32px 20px 24px; display: flex; flex-direction: column; background: #ffffff; color: #243c4b; color-scheme: light; border-right: 1px solid #e3e9ec; overflow-y: auto; }
+  .sklad-sidebar nav { margin-top: 35px; }
+  .nav-section { text-transform: uppercase; letter-spacing: 1.7px; font-size: 9px; color: #657681; padding: 0 14px; margin: 24px 0 10px; }
+  .sidebar-link { display: flex; align-items: center; gap: 12px; color: #475c69; font-size: 13px; padding: 12px 14px; margin: 4px 0; border: 1px solid transparent; border-radius: 8px; }
+  .sidebar-link:hover { background: #f3f6f7; color: #243c4b; }
+  .sidebar-link.is-active { background: #eef6e9; color: #345c27; border-color: #d8e9ce; }
+  .sidebar-link svg { flex-shrink: 0; }
+  .sidebar-caption { margin: auto 14px 28px; padding-top: 36px; color: #657681; font-size: 11px; line-height: 1.6; }
+  .sidebar-caption > span { display: block; color: #78be5a; font-size: 28px; margin-bottom: 8px; }
+  .sidebar-account { border-top: 1px solid #e3e9ec; padding: 21px 14px 0; display: flex; gap: 10px; align-items: center; min-width: 0; }
+  .account-avatar { display: grid; place-items: center; width: 34px; height: 34px; background: #eaf1f5; color: #31586f; border-radius: 10px; flex-shrink: 0; }
+  .sidebar-account > div { min-width: 0; }
+  .sidebar-account strong { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 11px; font-weight: 500; }
+  .sidebar-account small { display: block; font-size: 10px; color: #657681; margin-top: 4px; }
+  .sklad-workspace { display: flex; flex-direction: column; }
+  .sklad-topbar { min-height: 74px; display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 15px 32px; }
+  .sklad-topbar select { font-size: 13px; }
+  .sklad-main { padding: 30px 32px 40px; flex: 1; width: 100%; max-width: 1900px; margin: 0 auto; }
+  .page-heading { margin-bottom: 24px; align-items: flex-start; gap: 16px; }
+  .page-heading p { max-width: 70ch; line-height: 1.6; margin-top: 8px; }
+  .inventory-table th:nth-child(2), .inventory-table td:nth-child(2), .inventory-table th:nth-child(7), .inventory-table td:nth-child(7), .inventory-table th:nth-child(8), .inventory-table td:nth-child(8) { white-space: nowrap; }
+  .inventory-table th:nth-child(3) { min-width: 180px; }
+  .inventory-table th:nth-child(4) { min-width: 120px; }
+  .inventory-table th:nth-child(9) { min-width: 160px; }
+  .sklad-card {
+    color-scheme: light;
+    --panel: 255 255 255;
+    --panel-subtle: 242 246 248;
+    --content: 36 60 75;
+    --content-muted: 83 102 114;
+    --stroke: 219 227 232;
+    --action-selected: 238 246 233;
+    --success-fg: 44 101 35; --success-bg: 238 246 233;
+    --warning-fg: 126 80 10; --warning-bg: 255 247 226;
+    --danger-fg: 168 44 44; --danger-bg: 255 240 239;
+    --info-fg: 30 91 130; --info-bg: 234 245 252;
+    box-shadow: 0 4px 20px #00000012;
+  }
+  .sklad-card h2 { letter-spacing: -.2px; }
+  .sklad-main table thead { background: rgb(var(--panel-subtle)); }
+  .sklad-main table th { padding-top: 14px; padding-bottom: 14px; font-size: 11px; letter-spacing: .4px; }
+  .sklad-main table td { padding-top: 15px; padding-bottom: 15px; font-size: 13px; }
+  .sklad-main table tbody tr:hover { background-color: rgb(var(--panel-subtle) / .65); }
+  .sklad-main input, .sklad-main select, .sklad-main textarea { font-size: 13px; }
+  /* iOS renders date inputs with an intrinsic minimum width and centred text,
+     which pushed them past the card edge. Let them shrink like other fields. */
+  .sklad-main input[type='date'] { min-width: 0; max-width: 100%; }
+  @supports (-webkit-touch-callout: none) {
+    .sklad-main input[type='date'] { -webkit-appearance: none; appearance: none; text-align: left; }
+  }
+  .sklad-main input[type='date']::-webkit-date-and-time-value { text-align: left; min-height: 1.5em; }
+  .sklad-main button { font-size: 13px; }
+  .sklad-footer { padding: 18px 32px; font-size: 10px; }
+  @media (max-width: 1100px) {
+    .sklad-shell { grid-template-columns: 248px minmax(0, 1fr); }
+    .sklad-main { padding: 26px 22px; }
+    .sklad-topbar { padding: 14px 22px; }
+  }
+  @media (max-width: 767px) {
+    /* Phone: compact brand row, one swipeable row of nav pills, then a single
+       control row (role · language · sign in/out). */
+    .sklad-shell { display: flex; flex-direction: column; }
+    .sklad-sidebar { position: static; height: auto; padding: 14px 16px 0; border-right: none; border-bottom: 1px solid #e3e9ec; overflow: visible; }
+    .sidebar-caption, .sidebar-account { display: none; }
+    .sklad-sidebar nav { margin: 12px -16px 0; }
+    .sklad-sidebar nav ul {
+      display: flex; flex-wrap: nowrap; align-items: center; gap: 6px;
+      overflow-x: auto; overscroll-behavior-x: contain; scroll-snap-type: x proximity;
+      padding: 0 0 12px; scrollbar-width: none; scroll-padding-inline: 16px;
+      -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 28px), transparent);
+      mask-image: linear-gradient(to right, #000 calc(100% - 28px), transparent);
+    }
+    .sklad-sidebar nav ul::-webkit-scrollbar { display: none; }
+    .sklad-sidebar nav li { display: flex; align-items: center; flex-shrink: 0; scroll-snap-align: start; }
+    /* Inset the first/last pill: padding on a scrolling flex row is ignored
+       at the end edge and iOS Safari also drops it at the start. */
+    .sklad-sidebar nav li:first-child { margin-left: 16px; }
+    .sklad-sidebar nav li:last-child { margin-right: 16px; }
+    /* Section labels become a thin divider between Workspace and Administration. */
+    .nav-section { width: 1px; height: 22px; margin: 0 6px 0 2px; padding: 0; overflow: hidden; color: transparent; background: #dbe3e7; }
+    .sklad-sidebar nav li:first-child .nav-section { display: none; }
+    .sidebar-link { padding: 7px 12px; margin: 0; gap: 6px; font-size: 12px; white-space: nowrap; border-color: #e3e9ec; border-radius: 999px; }
+    .sidebar-link svg { width: 15px; height: 15px; }
+    .sklad-topbar { padding: 10px 16px; min-height: 0; }
+    .sklad-topbar > div:first-child { display: none; }
+    .sklad-topbar > div:last-child { width: 100%; flex-wrap: nowrap; }
+    .sklad-topbar .role-chip { margin-right: auto; }
+    .sklad-main { padding: 18px 16px 28px; }
+    /* iOS Safari zooms the page when a focused field is under 16px. */
+    .sklad-main input:not([type='checkbox']):not([type='radio']):not([type='color']),
+    .sklad-main select, .sklad-main textarea, .sklad-topbar select { font-size: 16px; }
+    .sklad-footer { padding: 16px; }
+  }
+}
+@layer components {
+  @media (min-width: 1250px) {
+    .options-page { display: grid; grid-template-columns: minmax(280px, .8fr) minmax(480px, 1.2fr); gap: 20px; align-items: start; }
+    .options-page > :not(.options-section) { grid-column: 1 / -1; }
+    .options-page.space-y-4 > * { margin-top: 0; margin-bottom: 0; }
+  }
+  .options-section li { border-bottom: 1px solid rgb(var(--stroke)); padding-bottom: 11px; padding-top: 4px; }
+  .options-section h2 { margin-bottom: 6px; }
+}
+
+@layer components {
+  .pekat-wordmark { display: block; width: 226px; max-width: 100%; margin: 4px auto 0; padding: 0; border-radius: 0; }
+  .pekat-wordmark img { display: block; width: 100%; height: auto; }
+  @media (max-width: 767px) {
+    .pekat-wordmark { width: 156px; margin: 0; }
+  }
+}
+
+@layer components {
+  /* Preserve native keyboard navigation, type-ahead and mobile pickers. */
+  .sklad-select {
+    --panel: 255 255 255;
+    --content: 36 60 75;
+    appearance: none;
+    color-scheme: light;
+    background-color: #fff;
+    color: #243c4b;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%23536672' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+    background-position: right 12px center;
+    background-repeat: no-repeat;
+    text-overflow: ellipsis;
+    cursor: pointer;
+  }
+  .sklad-select option, .sklad-select optgroup { background: #fff; color: #243c4b; }
+  .sklad-select:disabled { cursor: not-allowed; opacity: .55; }
+  .sklad-select:not(:disabled):not([aria-invalid="true"]):hover { border-color: #36566a; }
+  .sklad-card input[type='checkbox'] { accent-color: #477e32; }
+}
+
+@layer components {
+  .role-chip { border: 1px solid #42515c; border-radius: 999px; padding: 5px 10px; font-size: 11px; color: #dce6ec; white-space: nowrap; }
+  .inventory-readonly .inventory-table th:first-child,
+  .inventory-readonly .inventory-table tr:has(td:nth-child(2)) td:first-child { display: none; }
+}

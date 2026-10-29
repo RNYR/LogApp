@@ -1,0 +1,427 @@
+#!/usr/bin/env bash
+# =============================================================================
+# scripts/make-certs — create the Sklad local CA and server certificate
+#
+# Generates, into deploy/certs (or --out DIR):
+#
+#   rootCA.pem   root CA certificate  -> install this on client devices
+#   rootCA.key   root CA private key  -> keep secret, needed to re-issue leaves
+#   sklad.crt    server certificate, full chain (leaf first, then rootCA.pem)
+#   sklad.key    server private key
+#
+# The output feeds deploy/Caddyfile.byo (mounted at /certs). The default edge
+# configuration (deploy/Caddyfile) does not need this script: Caddy's own
+# internal CA issues and stores those certificates itself.
+#
+# Typical use:
+#
+#   ./scripts/make-certs                                  # detect the LAN IP
+#   ./scripts/make-certs --ips 192.168.1.50,10.0.0.5
+#   ./scripts/make-certs --hosts sklad.local,sklad,nas.local
+#   ./scripts/make-certs --ca-only                        # trust first, issue later
+#   ./scripts/make-certs --force                          # rotate everything
+#
+# Re-running is cheap and safe: the CA is reused unless --force is given (so
+# devices keep their trust) and the leaf is only re-issued when it is missing,
+# close to expiry, or missing one of the requested names — which is exactly what
+# happens when the NAS gets a new LAN address.
+#
+# Requires openssl on PATH (OpenSSL 1.1.1+/3.x or LibreSSL 3.x).
+# =============================================================================
+set -euo pipefail
+umask 077
+
+# -----------------------------------------------------------------------------
+# Defaults (SKLAD_HOST / SKLAD_LAN_IP from the environment are used when set, so
+# the script can share the same .env as docker-compose).
+# -----------------------------------------------------------------------------
+SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd -- "$SCRIPT_DIR/.." && pwd)"
+
+OUT_DIR="$REPO_ROOT/deploy/certs"
+DEFAULT_HOSTS="sklad.local,sklad,localhost"
+DAYS=825          # leaf lifetime (browsers reject >825 days for publicly trusted CAs)
+CA_DAYS=3650      # root CA lifetime
+KEY_TYPE="rsa"    # rsa | ec
+FORCE=0
+CA_ONLY=0
+QUIET=0
+RENEW_WINDOW_DAYS=30
+
+CA_CN="Sklad Local Root CA"
+CA_ORG="Sklad"
+
+HOSTS=""
+IPS=""
+
+# -----------------------------------------------------------------------------
+# Helpers
+# -----------------------------------------------------------------------------
+usage() {
+	cat <<'EOF'
+Usage: scripts/make-certs [options]
+
+Options:
+  --hosts LIST      Comma-separated DNS names for the certificate SANs.
+                    Default: $SKLAD_HOST (if set) plus sklad,localhost, or
+                    sklad.local,sklad,localhost.
+  --ips LIST        Comma-separated IP addresses for the certificate SANs.
+                    Default: $SKLAD_LAN_IP (if set) plus 127.0.0.1, or the
+                    auto-detected LAN address plus 127.0.0.1.
+  --days N          Leaf certificate lifetime in days (default: 825).
+  --ca-days N       Root CA lifetime in days (default: 3650).
+  --key-type TYPE   rsa (default, 2048 bit) or ec (prime256v1).
+  --out DIR         Output directory (default: deploy/certs).
+  --ca-only         Only create or rotate the root CA.
+  --force           Rotate the root CA and the leaf unconditionally.
+  --quiet           Only print errors.
+  -h, --help        Show this help.
+
+Environment:
+  SKLAD_HOST, SKLAD_LAN_IP   Used as SAN defaults when the flags are omitted.
+EOF
+}
+
+log() { [ "$QUIET" -eq 1 ] || printf '%s\n' "$*"; }
+warn() { printf 'warning: %s\n' "$*" >&2; }
+die() {
+	printf 'error: %s\n' "$*" >&2
+	exit 1
+}
+
+need_openssl() {
+	command -v openssl >/dev/null 2>&1 || {
+		printf 'error: openssl was not found on PATH.\n' >&2
+		printf '       Install it (QNAP: Entware/opkg "openssl"; macOS: brew install openssl)\n' >&2
+		printf '       or run this script on a machine that has it and copy the files over.\n' >&2
+		exit 2
+	}
+}
+
+# detect_lan_ip prints the best guess for this machine's LAN address, or nothing.
+detect_lan_ip() {
+	local ip="" iface=""
+	if command -v ip >/dev/null 2>&1; then
+		ip="$(ip -4 route get 1.1.1.1 2>/dev/null | awk '{for (i=1;i<=NF;i++) if ($i=="src") {print $(i+1); exit}}' || true)"
+	fi
+	if [ -z "$ip" ] && command -v hostname >/dev/null 2>&1; then
+		ip="$(hostname -I 2>/dev/null | tr ' ' '\n' | grep -E '^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$' | grep -v '^127\.' | head -n 1 || true)"
+	fi
+	if [ -z "$ip" ] && command -v route >/dev/null 2>&1 && command -v ipconfig >/dev/null 2>&1; then
+		iface="$(route -n get default 2>/dev/null | awk '/interface:/{print $2}' || true)"
+		[ -n "$iface" ] && ip="$(ipconfig getifaddr "$iface" 2>/dev/null || true)"
+	fi
+	printf '%s' "$ip"
+}
+
+# csv_to_lines LIST: "a, b ,c" -> one entry per line, trimmed, drop empties.
+csv_to_lines() {
+	printf '%s' "$1" | tr ',' '\n' | sed 's/^[[:space:]]*//; s/[[:space:]]*$//' | grep -v '^$' || true
+}
+
+# cert_sans FILE: print the certificate's SANs as "DNS:name" / "IP:addr" lines.
+cert_sans() {
+	local file="$1" out=""
+	out="$(openssl x509 -in "$file" -noout -ext subjectAltName 2>/dev/null || true)"
+	if [ -z "$out" ]; then
+		# Older builds without -ext: fall back to the human-readable dump.
+		out="$(openssl x509 -in "$file" -noout -text 2>/dev/null |
+			sed -n '/Subject Alternative Name/,/^[[:space:]]*[A-Z][A-Za-z]* *:/p' || true)"
+	fi
+	# openssl prints "IP Address:1.2.3.4"; normalise before matching.
+	printf '%s' "$out" |
+		sed 's/IP Address:/IP:/g' |
+		tr -d ' \t' |
+		tr ',' '\n' |
+		grep -E '^(DNS|IP):' |
+		sort -u || true
+}
+
+cert_not_after() {
+	openssl x509 -in "$1" -noout -enddate 2>/dev/null | sed 's/^notAfter=//' || true
+}
+
+cert_fingerprint() {
+	openssl x509 -in "$1" -noout -fingerprint -sha256 2>/dev/null | sed 's/^.*=//' || true
+}
+
+gen_key() {
+	case "$KEY_TYPE" in
+	rsa)
+		if ! openssl genpkey -algorithm RSA -pkeyopt rsa_keygen_bits:2048 -out "$1" 2>/dev/null; then
+			openssl genrsa -out "$1" 2048
+		fi
+		;;
+	ec)
+		openssl ecparam -name prime256v1 -genkey -noout -out "$1"
+		;;
+	*) die "unknown --key-type '$KEY_TYPE' (use rsa or ec)" ;;
+	esac
+	chmod 600 "$1"
+}
+
+# -----------------------------------------------------------------------------
+# Argument parsing
+# -----------------------------------------------------------------------------
+while [ $# -gt 0 ]; do
+	case "$1" in
+	--hosts)
+		HOSTS="${2:-}"
+		shift 2
+		;;
+	--ips)
+		IPS="${2:-}"
+		shift 2
+		;;
+	--days)
+		DAYS="${2:-}"
+		shift 2
+		;;
+	--ca-days)
+		CA_DAYS="${2:-}"
+		shift 2
+		;;
+	--key-type)
+		KEY_TYPE="${2:-}"
+		shift 2
+		;;
+	--out)
+		OUT_DIR="${2:-}"
+		shift 2
+		;;
+	--ca-only)
+		CA_ONLY=1
+		shift
+		;;
+	--force)
+		FORCE=1
+		shift
+		;;
+	--quiet)
+		QUIET=1
+		shift
+		;;
+	-h | --help)
+		usage
+		exit 0
+		;;
+	*)
+		usage >&2
+		die "unknown argument '$1'"
+		;;
+	esac
+done
+
+case "$DAYS" in '' | *[!0-9]*) die "--days must be a positive integer" ;; esac
+case "$CA_DAYS" in '' | *[!0-9]*) die "--ca-days must be a positive integer" ;; esac
+[ "$DAYS" -gt 0 ] || die "--days must be greater than zero"
+[ "$CA_DAYS" -gt 0 ] || die "--ca-days must be greater than zero"
+[ "$DAYS" -le "$CA_DAYS" ] || die "--days must not exceed --ca-days (a leaf cannot outlive its CA)"
+
+need_openssl
+
+# -----------------------------------------------------------------------------
+# Resolve SANs
+# -----------------------------------------------------------------------------
+if [ -z "$HOSTS" ]; then
+	HOSTS="$DEFAULT_HOSTS"
+	if [ -n "${SKLAD_HOST:-}" ]; then
+		HOSTS="$SKLAD_HOST,${SKLAD_HOST_ALT:-sklad},localhost"
+	fi
+fi
+
+if [ -z "$IPS" ]; then
+	IPS="127.0.0.1"
+	if [ -n "${SKLAD_LAN_IP:-}" ]; then
+		IPS="$SKLAD_LAN_IP,127.0.0.1"
+	else
+		detected="$(detect_lan_ip)"
+		if [ -n "$detected" ]; then
+			IPS="$detected,127.0.0.1"
+		fi
+	fi
+fi
+
+HOST_LIST="$(csv_to_lines "$HOSTS")"
+IP_LIST="$(csv_to_lines "$IPS")"
+[ -n "$HOST_LIST" ] || die "no DNS names given (use --hosts)"
+if [ -z "$IP_LIST" ]; then
+	warn "no IP addresses given; the certificate will only cover DNS names"
+fi
+
+PRIMARY_HOST="$(printf '%s\n' "$HOST_LIST" | head -n 1)"
+
+mkdir -p "$OUT_DIR"
+chmod 755 "$OUT_DIR"
+
+CA_CRT="$OUT_DIR/rootCA.pem"
+CA_KEY="$OUT_DIR/rootCA.key"
+LEAF_CRT="$OUT_DIR/sklad.crt"
+LEAF_KEY="$OUT_DIR/sklad.key"
+CA_SERIAL="$OUT_DIR/rootCA.srl"
+
+TMP_DIR="$(mktemp -d "${TMPDIR:-/tmp}/sklad-certs.XXXXXX")"
+cleanup() { rm -rf "$TMP_DIR"; }
+trap cleanup EXIT
+
+CONF="$TMP_DIR/openssl.cnf"
+CSR="$TMP_DIR/sklad.csr"
+
+{
+	echo "# Generated by scripts/make-certs on $(date -u '+%Y-%m-%dT%H:%M:%SZ')"
+	echo "[ req ]"
+	echo "default_md = sha256"
+	echo "prompt = no"
+	echo "distinguished_name = dn"
+	echo "[ dn ]"
+	echo "CN = $PRIMARY_HOST"
+	echo "O = $CA_ORG"
+	echo "[ v3_ca ]"
+	echo "basicConstraints = critical,CA:TRUE,pathlen:0"
+	echo "keyUsage = critical,keyCertSign,cRLSign"
+	echo "subjectKeyIdentifier = hash"
+	echo "[ v3_server ]"
+	echo "basicConstraints = critical,CA:FALSE"
+	echo "keyUsage = critical,digitalSignature,keyEncipherment"
+	echo "extendedKeyUsage = serverAuth"
+	echo "subjectAltName = @alt_names"
+	echo "subjectKeyIdentifier = hash"
+	echo "authorityKeyIdentifier = keyid,issuer"
+	echo "[ alt_names ]"
+	i=0
+	while IFS= read -r host; do
+		[ -n "$host" ] || continue
+		i=$((i + 1))
+		echo "DNS.$i = $host"
+	done <<EOF
+$HOST_LIST
+EOF
+	i=0
+	while IFS= read -r ip; do
+		[ -n "$ip" ] || continue
+		i=$((i + 1))
+		echo "IP.$i = $ip"
+	done <<EOF
+$IP_LIST
+EOF
+} >"$CONF"
+
+# -----------------------------------------------------------------------------
+# Root CA (created once; shared by every leaf so device trust survives renewals)
+# -----------------------------------------------------------------------------
+ca_state="reused"
+if [ "$FORCE" -eq 1 ] || [ ! -f "$CA_CRT" ] || [ ! -f "$CA_KEY" ]; then
+	ca_state="created"
+	log "==> creating root CA ($CA_CN, $CA_DAYS days)"
+	rm -f "$CA_CRT" "$CA_KEY" "$CA_SERIAL"
+	gen_key "$CA_KEY"
+	openssl req -x509 -new -sha256 -days "$CA_DAYS" \
+		-key "$CA_KEY" \
+		-config "$CONF" \
+		-extensions v3_ca \
+		-subj "/CN=$CA_CN/O=$CA_ORG" \
+		-out "$CA_CRT" >/dev/null 2>&1
+	chmod 644 "$CA_CRT"
+else
+	if ! openssl x509 -in "$CA_CRT" -noout -checkend 0 >/dev/null 2>&1; then
+		die "the existing root CA ($CA_CRT) has expired; re-run with --force to create a new one (devices must trust it again)"
+	fi
+fi
+
+if [ "$CA_ONLY" -eq 1 ]; then
+	log "==> root CA only (--ca-only); no server certificate issued"
+	log ""
+	log "CA file:        $CA_CRT"
+	log "CA key:         $CA_KEY (keep secret)"
+	log "CA fingerprint: $(cert_fingerprint "$CA_CRT")"
+	log "Valid until:    $(cert_not_after "$CA_CRT")"
+	log ""
+	log "Next: install $CA_CRT on the devices that must trust Sklad, then run"
+	log "      this script again without --ca-only to issue the server certificate."
+	exit 0
+fi
+
+# -----------------------------------------------------------------------------
+# Leaf: reuse when it still covers the requested SANs and is not near expiry
+# -----------------------------------------------------------------------------
+want_sans="$TMP_DIR/want.sans"
+{
+	while IFS= read -r host; do [ -n "$host" ] && echo "DNS:$host"; done <<EOF
+$HOST_LIST
+EOF
+	while IFS= read -r ip; do [ -n "$ip" ] && echo "IP:$ip"; done <<EOF
+$IP_LIST
+EOF
+} | sort -u >"$want_sans"
+
+need_leaf=1
+leaf_state="issued"
+if [ "$ca_state" = "reused" ] && [ "$FORCE" -eq 0 ] && [ -f "$LEAF_CRT" ] && [ -f "$LEAF_KEY" ]; then
+	have_sans="$TMP_DIR/have.sans"
+	cert_sans "$LEAF_CRT" | sort -u >"$have_sans"
+	missing="$(comm -23 "$want_sans" "$have_sans" || true)"
+	if [ -n "$missing" ]; then
+		leaf_state="re-issued (did not cover: $(printf '%s' "$missing" | tr '\n' ' '))"
+	elif ! openssl x509 -in "$LEAF_CRT" -noout -checkend $((RENEW_WINDOW_DAYS * 86400)) >/dev/null 2>&1; then
+		leaf_state="re-issued (expiring within ${RENEW_WINDOW_DAYS} days)"
+	else
+		need_leaf=0
+		leaf_state="kept (already covers every requested name)"
+	fi
+fi
+
+if [ "$need_leaf" -eq 1 ]; then
+	log "==> issuing server certificate for: $(tr '\n' ' ' <"$want_sans")"
+	rm -f "$LEAF_CRT" "$LEAF_KEY"
+	gen_key "$LEAF_KEY"
+	openssl req -new -sha256 \
+		-key "$LEAF_KEY" \
+		-config "$CONF" \
+		-subj "/CN=$PRIMARY_HOST/O=$CA_ORG" \
+		-out "$CSR" >/dev/null 2>&1
+	openssl x509 -req \
+		-in "$CSR" \
+		-CA "$CA_CRT" \
+		-CAkey "$CA_KEY" \
+		-CAcreateserial \
+		-days "$DAYS" \
+		-sha256 \
+		-extfile "$CONF" \
+		-extensions v3_server \
+		-out "$TMP_DIR/leaf.crt" >/dev/null 2>&1
+	# Full chain: Caddy (and every TLS client) expects the leaf first, then the
+	# issuing CA, so a single file is enough for `tls <cert> <key>`.
+	cat "$TMP_DIR/leaf.crt" "$CA_CRT" >"$LEAF_CRT"
+	chmod 644 "$LEAF_CRT"
+	[ -f "$CA_SERIAL" ] && chmod 600 "$CA_SERIAL"
+fi
+
+# Self-check: whatever we are leaving behind must chain to the CA we ship.
+openssl x509 -in "$LEAF_CRT" -out "$TMP_DIR/leaf-first.crt" >/dev/null 2>&1
+if ! openssl verify -CAfile "$CA_CRT" "$TMP_DIR/leaf-first.crt" >/dev/null 2>&1; then
+	die "the server certificate does not verify against $CA_CRT (delete deploy/certs and re-run)"
+fi
+
+# -----------------------------------------------------------------------------
+# Report
+# -----------------------------------------------------------------------------
+log ""
+log "root CA      $CA_CRT              ($ca_state, until $(cert_not_after "$CA_CRT"))"
+log "             fingerprint $(cert_fingerprint "$CA_CRT")"
+log "server cert  $LEAF_CRT    ($leaf_state, until $(cert_not_after "$LEAF_CRT"))"
+log "server key   $LEAF_KEY"
+log "SANs         $(cert_sans "$LEAF_CRT" | tr '\n' ' ')"
+log ""
+log "Next steps:"
+log "  1. Trust the CA on every device that must use the camera: open"
+log "     https://$PRIMARY_HOST/ca.crt (or copy $CA_CRT) and install it."
+log "     iOS: install the profile, then enable it in"
+log "          Settings > General > About > Certificate Trust Settings."
+log "  2. Switch the edge to the provided certificate, e.g. in .env:"
+log "       CADDYFILE=deploy/Caddyfile.byo"
+log "       SKLAD_LAN_IP=<this NAS address>"
+log "     then: docker compose up -d"
+log "  3. Keep $CA_KEY secret. Anyone holding it can impersonate Sklad."
+log ""
+log "Re-run after a LAN address change: the CA is reused and only the server"
+log "certificate is re-issued, so devices keep their trust."

@@ -1,0 +1,1117 @@
+openapi: 3.0.3
+info:
+  title: Sklad — Equipment Inventory API
+  version: 1.0.0
+  description: |
+    Versioned REST API for the Sklad inventory & lending suite.
+    Base contract for backend (tasks 2.x, 4.x) and the SPA client (task 3.x).
+
+    Auth: server-side sessions via HttpOnly cookie `sklad_session`; mutating requests
+    additionally require the double-submit CSRF header `X-CSRF-Token` (token issued by
+    `POST /api/v1/auth/login` and mirrored in the `sklad_csrf` cookie).
+
+    Error envelope: every non-2xx response is `{ "error": { "code", "message", "details" } }`.
+  contact:
+    name: David Žitník
+  license:
+    name: MIT
+servers:
+  - url: https://sklad.local
+    description: Production (QNAP TS-251, Caddy edge)
+  - url: http://localhost:8080
+    description: Local development
+tags:
+  - name: system
+    description: Health and version
+  - name: auth
+    description: Authentication and sessions
+  - name: users
+    description: User management (admin)
+  - name: options
+    description: Item types and statuses
+  - name: items
+    description: Inventory items, scan resolution, bulk updates
+  - name: export
+    description: Data export
+  - name: settings
+    description: Runtime settings (admin)
+  - name: notifications
+    description: Discord alerting and delivery log (admin)
+
+security:
+  - cookieAuth: []
+    csrfAuth: []
+
+paths:
+  /ca.crt:
+    get:
+      tags: [system]
+      summary: Download the root CA certificate (device trust bootstrap)
+      security: []
+      responses:
+        '200':
+          description: PEM-encoded root CA certificate
+          content:
+            application/x-pem-file:
+              schema: { type: string, format: binary }
+
+  /api/v1/health:
+    get:
+      tags: [system]
+      summary: Liveness probe
+      security: []
+      responses:
+        '200':
+          description: Healthy
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Health' }
+
+  /api/v1/version:
+    get:
+      tags: [system]
+      summary: Build/version info
+      security: []
+      responses:
+        '200':
+          description: Version info
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Version' }
+
+  # ---------------------------------------------------------------- auth ----
+  /api/v1/auth/login:
+    post:
+      tags: [auth]
+      summary: Authenticate and start a session
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/LoginRequest' }
+      responses:
+        '200':
+          description: Authenticated (sets sklad_session + sklad_csrf cookies)
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/LoginResponse' }
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+
+  /api/v1/auth/logout:
+    post:
+      tags: [auth]
+      summary: End the current session
+      responses:
+        '204':
+          description: Logged out
+
+  /api/v1/auth/me:
+    get:
+      tags: [auth]
+      summary: Current authenticated user
+      responses:
+        '200':
+          description: Current user
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/UserResponse' }
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /api/v1/auth/change-password:
+    post:
+      tags: [auth]
+      summary: Change own password (clears must_change_password)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ChangePasswordRequest' }
+      responses:
+        '200':
+          description: Password changed
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/OkResponse' }
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  # --------------------------------------------------------------- users ----
+  /api/v1/users:
+    get:
+      tags: [users]
+      summary: List users
+      responses:
+        '200':
+          description: User list
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/UserList' }
+        '403':
+          $ref: '#/components/responses/Forbidden'
+    post:
+      tags: [users]
+      summary: Disabled — Editor is public; additional accounts cannot be created
+      deprecated: true
+      responses:
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+  /api/v1/users/{userId}:
+    parameters:
+      - $ref: '#/components/parameters/userId'
+    patch:
+      tags: [users]
+      summary: Update a user (role, active, display name)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/UserUpdate' }
+      responses:
+        '200':
+          description: Updated
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/UserResponse' }
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    delete:
+      tags: [users]
+      summary: Deactivate a user (active=false)
+      responses:
+        '200':
+          description: Deactivated
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/OkResponse' }
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  # ------------------------------------------------------------- options ----
+  /api/v1/options:
+    get:
+      tags: [options]
+      summary: List item types and statuses (localized by ?lang= or Accept-Language)
+      security: []
+      parameters:
+        - name: lang
+          in: query
+          schema: { type: string, enum: [en, cs, it], default: en }
+      responses:
+        '200':
+          description: Options
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Options' }
+    put:
+      tags: [options]
+      summary: Replace options and cascade renames to items (admin)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/OptionsUpdate' }
+      responses:
+        '200':
+          description: Saved
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Options' }
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '409':
+          $ref: '#/components/responses/Conflict'
+
+  # --------------------------------------------------------------- items ----
+  /api/v1/items:
+    get:
+      security: []
+      tags: [items]
+      summary: List items (search / filter / paginate)
+      parameters:
+        - $ref: '#/components/parameters/q'
+        - $ref: '#/components/parameters/type'
+        - $ref: '#/components/parameters/status'
+        - $ref: '#/components/parameters/archived'
+        - $ref: '#/components/parameters/overdue'
+        - $ref: '#/components/parameters/sort'
+        - $ref: '#/components/parameters/order'
+        - $ref: '#/components/parameters/page'
+        - $ref: '#/components/parameters/perPage'
+      responses:
+        '200':
+          description: Item list
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ItemList' }
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+    post:
+      tags: [items]
+      summary: Create an item (auto-assigns next asset_tag if omitted)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ItemInput' }
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ItemResponse' }
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '409':
+          $ref: '#/components/responses/Conflict'
+
+  /api/v1/items/resolve:
+    post:
+      security: []
+      tags: [items]
+      summary: Resolve scanned codes to items (scan buffer)
+      description: |
+        Takes raw scanned CODE128 payloads, normalizes them, and returns matched items plus
+        unknown codes. Deduplication is the client's responsibility; duplicates within the
+        request are collapsed.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ResolveRequest' }
+      responses:
+        '200':
+          description: Resolution result
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ResolveResponse' }
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /api/v1/items/bulk:
+    post:
+      tags: [items]
+      security: []
+      summary: Public transactional rental update (status / dates / personnel / note)
+      description: |
+        Applies one patch to many items in a single transaction. Each entry carries the
+        expected `version`; any conflict or validation error rolls back the entire batch.
+        Non-Feasibility rentals require personnel_id. Customer requires a nonblank note
+        containing the customer name. Only authenticated Admin can return an item to
+        Feasibility; all other rental fields are locked in that status. Anonymous
+        requests require same-origin JSON; Admin requests also require CSRF.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/BulkRequest' }
+      responses:
+        '200':
+          description: Bulk result
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/BulkResponse' }
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '409':
+          $ref: '#/components/responses/Conflict'
+
+  /api/v1/items/{itemId}:
+    parameters:
+      - $ref: '#/components/parameters/itemId'
+    get:
+      security: []
+      tags: [items]
+      summary: Get one item
+      responses:
+        '200':
+          description: Item
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ItemResponse' }
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    put:
+      tags: [items]
+      summary: Replace an item (requires version)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ItemUpdate' }
+      responses:
+        '200':
+          description: Updated
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ItemResponse' }
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+    patch:
+      tags: [items]
+      security: []
+      summary: Public rental update or authenticated Admin item update (requires version)
+      description: >-
+        Public Editor may only set status, sent_date, return_date, personnel_id and note.
+        Only Admin may set name, sn or type. Non-Feasibility requires personnel_id;
+        Customer requires a nonblank note containing the customer name. Feasibility
+        locks rental details and only Admin may transition back to it. JSON-only,
+        same-origin writes; Admin requires CSRF. Null patch values are rejected.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ItemPatch' }
+      responses:
+        '200':
+          description: Updated
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ItemResponse' }
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+    delete:
+      tags: [items]
+      summary: Archive an item (soft delete)
+      responses:
+        '200':
+          description: Archived
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/OkResponse' }
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  # -------------------------------------------------------------- export ----
+  /api/v1/export:
+    get:
+      tags: [export]
+      summary: Export inventory as JSON or CSV
+      parameters:
+        - name: format
+          in: query
+          schema: { type: string, enum: [json, csv], default: json }
+        - name: archived
+          in: query
+          schema: { type: boolean, default: false }
+      responses:
+        '200':
+          description: Export file
+          content:
+            application/json:
+              schema: { type: object, additionalProperties: true }
+            text/csv:
+              schema: { type: string }
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  # ------------------------------------------------------------ settings ----
+  /api/v1/settings:
+    get:
+      tags: [settings]
+      summary: Read settings (secrets masked)
+      responses:
+        '200':
+          description: Settings
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Settings' }
+        '403':
+          $ref: '#/components/responses/Forbidden'
+    put:
+      tags: [settings]
+      summary: Update settings
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/SettingsUpdate' }
+      responses:
+        '200':
+          description: Saved
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Settings' }
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+  # -------------------------------------------------------- notifications ----
+  /api/v1/notifications:
+    get:
+      tags: [notifications]
+      summary: Delivery log (paginated)
+      parameters:
+        - $ref: '#/components/parameters/page'
+        - $ref: '#/components/parameters/perPage'
+      responses:
+        '200':
+          description: Deliveries
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/DeliveryList' }
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+  /api/v1/notifications/test:
+    post:
+      tags: [notifications]
+      summary: Send a test Discord message
+      responses:
+        '200':
+          description: Test result
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/OkResponse' }
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '422':
+          $ref: '#/components/responses/Unprocessable'
+
+  /api/v1/notifications/run-now:
+    post:
+      tags: [notifications]
+      summary: Trigger the overdue check immediately
+      responses:
+        '200':
+          description: Run result
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/NotifyRunResponse' }
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/Unprocessable'
+        '502':
+          $ref: '#/components/responses/BadGateway'
+        '503':
+          $ref: '#/components/responses/ServiceUnavailable'
+
+  /api/v1/personnel:
+    get:
+      security: []
+      summary: Public directory with active flags and historical references
+      responses:
+        '200':
+          description: Personnel directory, including permanent Customer entry
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items: { $ref: '#/components/schemas/Person' }
+    post:
+      summary: Admin adds personnel
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name]
+              properties:
+                name: { type: string, minLength: 1, maxLength: 255 }
+      responses:
+        '201':
+          description: Created person
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+  /api/v1/personnel/{personId}:
+    patch:
+      summary: Admin edits, deactivates or reactivates personnel; Customer cannot be modified
+      parameters:
+        - name: personId
+          in: path
+          required: true
+          schema: { type: integer }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [version]
+              properties:
+                name: { type: string, minLength: 1, maxLength: 255 }
+                active: { type: boolean }
+                version: { type: integer }
+      responses:
+        '200':
+          description: Updated person; existing item references preserved
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '409':
+          $ref: '#/components/responses/Conflict'
+
+components:
+  securitySchemes:
+    cookieAuth:
+      type: apiKey
+      in: cookie
+      name: sklad_session
+    csrfAuth:
+      type: apiKey
+      in: header
+      name: X-CSRF-Token
+
+  parameters:
+    userId:
+      name: userId
+      in: path
+      required: true
+      schema: { type: integer }
+    itemId:
+      name: itemId
+      in: path
+      required: true
+      schema: { type: integer }
+    q:
+      name: q
+      in: query
+      schema: { type: string }
+      description: Free-text search across asset_tag, name, sn, note
+    type:
+      name: type
+      in: query
+      schema: { type: string }
+      description: Filter by item type value
+    status:
+      name: status
+      in: query
+      schema: { type: string }
+      description: Filter by status value
+    archived:
+      name: archived
+      in: query
+      schema: { type: boolean, default: false }
+    overdue:
+      name: overdue
+      in: query
+      schema: { type: boolean }
+      description: Only items with return_date <= today (when true)
+    sort:
+      name: sort
+      in: query
+      schema:
+        type: string
+        enum: [asset_tag, name, sn, type, status, sent_date, return_date, note, updated_at]
+        default: asset_tag
+    order:
+      name: order
+      in: query
+      schema: { type: string, enum: [asc, desc], default: asc }
+    page:
+      name: page
+      in: query
+      schema: { type: integer, minimum: 1, default: 1 }
+    perPage:
+      name: per_page
+      in: query
+      schema: { type: integer, minimum: 1, maximum: 1000, default: 20 }
+
+  responses:
+    BadRequest:
+      description: Validation error
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorResponse' }
+    Unauthorized:
+      description: Missing or invalid credentials
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorResponse' }
+    Forbidden:
+      description: Insufficient role
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorResponse' }
+    NotFound:
+      description: Resource not found
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorResponse' }
+    Conflict:
+      description: Version conflict or duplicate key
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorResponse' }
+    Unprocessable:
+      description: Not configured / unprocessable
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorResponse' }
+    TooManyRequests:
+      description: Rate limited
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorResponse' }
+    BadGateway:
+      description: Upstream (Discord) unreachable
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorResponse' }
+    ServiceUnavailable:
+      description: Delivery engine unavailable
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorResponse' }
+
+  schemas:
+    Person:
+      type: object
+      required: [id, name, active, is_customer, version]
+      properties:
+        id: { type: integer }
+        name: { type: string }
+        active: { type: boolean }
+        is_customer: { type: boolean }
+        version: { type: integer }
+
+    Error:
+      type: object
+      required: [code, message]
+      properties:
+        code:
+          type: string
+          description: Machine-readable code, e.g. version_conflict, validation_failed, not_found
+        message:
+          type: string
+        details:
+          type: array
+          items: { type: string }
+
+    ErrorResponse:
+      type: object
+      required: [error]
+      properties:
+        error: { $ref: '#/components/schemas/Error' }
+
+    OkResponse:
+      type: object
+      properties:
+        data:
+          type: object
+          properties:
+            ok: { type: boolean }
+
+    Health:
+      type: object
+      properties:
+        status: { type: string, example: ok }
+        version: { type: string }
+        time: { type: string, format: date-time }
+
+    Version:
+      type: object
+      properties:
+        version: { type: string }
+        commit: { type: string }
+        build_time: { type: string, format: date-time }
+
+    User:
+      type: object
+      required: [id, username, role]
+      properties:
+        id: { type: integer }
+        username: { type: string }
+        display_name: { type: string }
+        email: { type: string }
+        role: { type: string, enum: [admin] }
+        must_change_password: { type: boolean }
+        active: { type: boolean }
+        last_login_at: { type: string, format: date-time, nullable: true }
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+
+    UserResponse:
+      type: object
+      properties:
+        data: { $ref: '#/components/schemas/User' }
+
+    UserList:
+      type: object
+      properties:
+        data:
+          type: array
+          items: { $ref: '#/components/schemas/User' }
+
+    UserInput:
+      type: object
+      required: [username, password, role]
+      properties:
+        username: { type: string, enum: [editor] }
+        password: { type: string, minLength: 8 }
+        display_name: { type: string }
+        email: { type: string, format: email }
+        role: { type: string, enum: [editor] }
+
+    UserUpdate:
+      type: object
+      properties:
+        display_name: { type: string }
+        email: { type: string, format: email }
+        role: { type: string, enum: [admin, editor], description: Must equal the existing account role. }
+        active: { type: boolean }
+        password: { type: string, minLength: 8, description: Reset password (optional) }
+
+    LoginRequest:
+      type: object
+      required: [username, password]
+      properties:
+        username: { type: string }
+        password: { type: string }
+
+    LoginResponse:
+      type: object
+      properties:
+        data:
+          type: object
+          properties:
+            user: { $ref: '#/components/schemas/User' }
+            csrf_token: { type: string }
+
+    ChangePasswordRequest:
+      type: object
+      required: [current_password, new_password]
+      properties:
+        current_password: { type: string }
+        new_password: { type: string, minLength: 8 }
+
+    LocalizedLabels:
+      type: object
+      properties:
+        en: { type: string }
+        cs: { type: string }
+        it: { type: string }
+
+    TypeOption:
+      type: object
+      required: [value, label]
+      properties:
+        value: { type: string }
+        label: { type: string, description: Localized label for the requested locale }
+        labels: { $ref: '#/components/schemas/LocalizedLabels' }
+        sort_order: { type: integer }
+
+    StatusOption:
+      type: object
+      required: [value, label, color]
+      properties:
+        value: { type: string }
+        label: { type: string }
+        labels: { $ref: '#/components/schemas/LocalizedLabels' }
+        color: { type: string, example: '#93c47d' }
+        sort_order: { type: integer }
+
+    Options:
+      type: object
+      properties:
+        data:
+          type: object
+          properties:
+            types:
+              type: array
+              items: { $ref: '#/components/schemas/TypeOption' }
+            statuses:
+              type: array
+              items: { $ref: '#/components/schemas/StatusOption' }
+
+    OptionsUpdate:
+      type: object
+      required: [types, statuses]
+      properties:
+        types:
+          type: array
+          items: { $ref: '#/components/schemas/TypeOption' }
+        statuses:
+          type: array
+          items: { $ref: '#/components/schemas/StatusOption' }
+        renames:
+          type: object
+          description: "Optional { oldValue: newValue } maps for cascading type/status renames"
+          properties:
+            types:
+              type: object
+              additionalProperties: { type: string }
+            statuses:
+              type: object
+              additionalProperties: { type: string }
+
+    Item:
+      type: object
+      required: [id, asset_tag, name, sn, version, archived, created_at, updated_at]
+      properties:
+        personnel_id: { type: integer, nullable: true, readOnly: true, description: Personnel directory reference }
+        personnel_name: { type: string, nullable: true, readOnly: true }
+        id: { type: integer }
+        asset_tag: { type: string, example: PV-001 }
+        name: { type: string }
+        sn: { type: string }
+        type: { type: string, nullable: true }
+        type_label: { type: string, nullable: true }
+        status: { type: string, nullable: true }
+        status_label: { type: string, nullable: true }
+        status_color: { type: string, nullable: true }
+        sent_date: { type: string, format: date, nullable: true }
+        return_date: { type: string, format: date, nullable: true }
+        note: { type: string }
+        version: { type: integer, description: Optimistic-concurrency version }
+        archived: { type: boolean }
+        label_printed_at: { type: string, format: date-time, nullable: true }
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+        created_by: { type: string, nullable: true, description: username }
+        updated_by: { type: string, nullable: true, description: username }
+
+    ItemResponse:
+      type: object
+      properties:
+        data: { $ref: '#/components/schemas/Item' }
+
+    ItemList:
+      type: object
+      properties:
+        data:
+          type: array
+          items: { $ref: '#/components/schemas/Item' }
+        meta: { $ref: '#/components/schemas/Meta' }
+
+    Meta:
+      type: object
+      properties:
+        page: { type: integer }
+        per_page: { type: integer }
+        total: { type: integer }
+        total_pages: { type: integer }
+
+    ItemInput:
+      description: Admin-only creation. Default status Feasibility; rental validation applies.
+      type: object
+      properties:
+        personnel_id: { type: integer, minimum: 0, description: Directory reference; zero clears renter and is invalid outside Feasibility }
+        asset_tag: { type: string, description: Optional; auto-assigned when omitted }
+        name: { type: string, default: '' }
+        sn: { type: string, default: '' }
+        type: { type: string, description: Type value (machine key) }
+        status: { type: string, description: Status value (machine key) }
+        sent_date: { type: string, format: date, nullable: true }
+        return_date: { type: string, format: date, nullable: true }
+        note: { type: string, default: '' }
+
+    ItemUpdate:
+      type: object
+      required: [version]
+      properties:
+        personnel_id: { type: integer, minimum: 0, description: Directory reference; zero clears renter and is invalid outside Feasibility }
+        version: { type: integer }
+        name: { type: string }
+        sn: { type: string }
+        type: { type: string }
+        status: { type: string }
+        sent_date: { type: string, format: date, nullable: true }
+        return_date: { type: string, format: date, nullable: true }
+        note: { type: string }
+
+    ItemPatch:
+      type: object
+      required: [version]
+      properties:
+        personnel_id: { type: integer, minimum: 0, description: Directory reference; zero clears renter and is invalid outside Feasibility }
+        version: { type: integer }
+        name: { type: string }
+        sn: { type: string }
+        type: { type: string }
+        status: { type: string }
+        sent_date: { type: string, description: ISO date or empty string to clear }
+        return_date: { type: string, description: ISO date or empty string to clear }
+        note: { type: string }
+
+    ResolveRequest:
+      type: object
+      required: [codes]
+      properties:
+        codes:
+          type: array
+          items: { type: string }
+          description: Raw scanned payloads (may contain case/whitespace variance)
+
+    ResolveResponse:
+      type: object
+      properties:
+        data:
+          type: object
+          properties:
+            matched:
+              type: array
+              items: { $ref: '#/components/schemas/Item' }
+            unknown:
+              type: array
+              items: { type: string }
+
+    BulkRequest:
+      type: object
+      required: [items, patch]
+      properties:
+        items:
+          type: array
+          minItems: 1
+          items:
+            type: object
+            required: [asset_tag, version]
+            properties:
+              asset_tag: { type: string }
+              version: { type: integer }
+        patch:
+          type: object
+          additionalProperties: false
+          properties:
+            personnel_id: { type: integer, minimum: 0 }
+            status: { type: string }
+            note: { type: string }
+            sent_date: { type: string, format: date }
+            return_date: { type: string, format: date }
+            clear_sent_date: { type: boolean, default: false }
+            clear_return_date: { type: boolean, default: false }
+
+    BulkResponse:
+      type: object
+      properties:
+        data:
+          type: object
+          properties:
+            updated: { type: integer }
+            updated_items:
+              type: array
+              items: { $ref: '#/components/schemas/Item' }
+
+    Settings:
+      type: object
+      properties:
+        data:
+          type: object
+          properties:
+            discord:
+              type: object
+              properties:
+                webhook_set: { type: boolean }
+                webhook_preview: { type: string }
+                enabled: { type: boolean }
+            scheduler:
+              type: object
+              properties:
+                check_hour: { type: integer }
+                days_ahead: { type: integer }
+            locale:
+              type: object
+              properties:
+                default: { type: string, enum: [en, cs, it] }
+            general:
+              type: object
+              properties:
+                organization_name: { type: string }
+
+    SettingsUpdate:
+      type: object
+      properties:
+        discord:
+          type: object
+          properties:
+            webhook_url: { type: string, description: Empty string = keep existing }
+            enabled: { type: boolean }
+        scheduler:
+          type: object
+          properties:
+            check_hour: { type: integer, minimum: 0, maximum: 23 }
+            days_ahead: { type: integer, minimum: 0 }
+        locale:
+          type: object
+          properties:
+            default: { type: string, enum: [en, cs, it] }
+        general:
+          type: object
+          properties:
+            organization_name: { type: string }
+
+    NotificationDelivery:
+      type: object
+      properties:
+        id: { type: integer }
+        channel_id: { type: integer }
+        trigger: { type: string, enum: [overdue_daily, manual, test] }
+        status: { type: string, enum: [pending, sent, failed] }
+        item_count: { type: integer }
+        error: { type: string, nullable: true }
+        created_at: { type: string, format: date-time }
+        sent_at: { type: string, format: date-time, nullable: true }
+
+    DeliveryList:
+      type: object
+      properties:
+        data:
+          type: array
+          items: { $ref: '#/components/schemas/NotificationDelivery' }
+        meta: { $ref: '#/components/schemas/Meta' }
+
+    NotifyRunResponse:
+      type: object
+      properties:
+        data:
+          type: object
+          properties:
+            due_count: { type: integer }
+            sent: { type: boolean }
+            delivery_id: { type: integer, nullable: true }

@@ -1,0 +1,173 @@
+# =============================================================================
+# Sklad — Docker Compose deployment (app + Caddy edge)
+#
+#   app    the Go server (API + embedded SPA), HTTP on app:8080, state in /data
+#   caddy  TLS termination, HTTP→HTTPS redirect, /ca.crt, reverse proxy
+#
+# Only Caddy is reachable from the network. See deploy/certs/README.md for the
+# certificate modes and docs/DEPLOY-QNAP.md for the NAS runbook.
+#
+#   cp .env.example .env      # then set SKLAD_ADMIN_PASSWORD
+#   docker compose up -d --build
+#   https://sklad.local       (after trusting the local CA)
+#
+# Everything is configured through .env; the values below are the fallbacks used
+# when a key is missing. The `version` key is kept deliberately: QNAP Container
+# Station ships compose builds old enough to require it (newer compose only
+# prints an "obsolete" notice).
+# =============================================================================
+version: "3.8"
+
+services:
+  # ---------------------------------------------------------------------------
+  # Application server
+  # ---------------------------------------------------------------------------
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        # Shown in /api/v1/version and on the About page.
+        VERSION: ${SKLAD_VERSION:-dev}
+        COMMIT: ${SKLAD_COMMIT:-none}
+        BUILD_TIME: ${SKLAD_BUILD_TIME:-unknown}
+        # Must match the owner of the data volume when using a bind mount.
+        APP_UID: ${SKLAD_UID:-10001}
+        APP_GID: ${SKLAD_GID:-10001}
+    image: sklad:local
+    container_name: sklad-app
+    restart: unless-stopped
+    init: true
+    # The server drains connections for up to 15s on SIGTERM; Docker's default
+    # 10s grace period would SIGKILL it mid-drain.
+    stop_grace_period: 20s
+
+    # The .env file carries the whole application configuration (see
+    # docs/contracts/config.md); the environment block below only pins what the
+    # container layout requires and takes precedence over .env.
+    env_file:
+      - .env
+    environment:
+      SKLAD_HTTP_ADDR: ":8080"
+      SKLAD_DATA_DIR: /data
+      SKLAD_DB_PATH: /data/sklad.db
+      # Public origin, used for links and for the Secure cookie attribute. Keep
+      # SKLAD_PUBLIC_PORT in step with the published HTTPS port below.
+      SKLAD_BASE_URL: "https://${SKLAD_HOST:-sklad.local}${SKLAD_PUBLIC_PORT:-}"
+      SKLAD_TRUST_PROXY: "true"
+      # Fail fast with a clear message instead of seeding a weak account.
+      SKLAD_ADMIN_PASSWORD: "${SKLAD_ADMIN_PASSWORD:?set SKLAD_ADMIN_PASSWORD in .env (copy .env.example)}"
+
+    # Not published: Caddy is the only way in.
+    expose:
+      - "8080"
+
+    volumes:
+      # Database, backups and generated files. Use a bind mount instead when the
+      # NAS backup job must see the files directly, e.g.
+      #   - /share/Container/sklad/data:/data
+      # and make sure the directory is owned by SKLAD_UID/SKLAD_GID first.
+      - sklad_data:/data
+
+    networks:
+      - sklad
+
+    # The app writes only to /data, so the rest of the filesystem can be
+    # immutable; SQLite gets a small writable /tmp for its temporary files.
+    read_only: true
+    tmpfs:
+      - /tmp:size=64m
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+
+    # Keeps a chatty container from filling the NAS volume. The image itself
+    # defines the healthcheck (GET /api/v1/health).
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # ---------------------------------------------------------------------------
+  # Caddy edge
+  # ---------------------------------------------------------------------------
+  caddy:
+    # 2.5+ for the `pki` block, 2.7+ for `request_body`; pin the major and let
+    # patch/minor updates flow in.
+    image: caddy:2-alpine
+    container_name: sklad-caddy
+    restart: unless-stopped
+    depends_on:
+      - app
+
+    ports:
+      # QTS web admin often owns 80/443: map 8080/8443 instead and set
+      # SKLAD_PUBLIC_PORT=:8443 so the HTTP redirect points at the right port.
+      - "${SKLAD_HTTP_PORT:-80}:80"
+      - "${SKLAD_HTTPS_PORT:-443}:443"
+
+    environment:
+      # Consumed by deploy/Caddyfile / deploy/Caddyfile.byo. Every value falls
+      # back to the Caddyfile default when unset, so an empty .env entry can
+      # never produce an empty site address.
+      SKLAD_HOST: ${SKLAD_HOST:-sklad.local}
+      SKLAD_HOST_ALT: ${SKLAD_HOST_ALT:-sklad}
+      SKLAD_LAN_IP: ${SKLAD_LAN_IP:-127.0.0.1}
+      # Intentionally allowed to be empty: the Caddyfile appends it to the
+      # redirect target only when the deployment uses a non-standard HTTPS port.
+      SKLAD_PUBLIC_PORT: ${SKLAD_PUBLIC_PORT}
+      SKLAD_APP_UPSTREAM: app:8080
+      # Caddy's log level is separate from the app's SKLAD_LOG_LEVEL (Caddy
+      # expects upper case, the app lower case).
+      SKLAD_LOG_LEVEL: ${SKLAD_CADDY_LOG_LEVEL:-INFO}
+      SKLAD_HSTS_MAX_AGE: ${SKLAD_HSTS_MAX_AGE:-31536000}
+      SKLAD_MAX_UPLOAD: ${SKLAD_MAX_UPLOAD:-10MB}
+
+    volumes:
+      # CADDYFILE=deploy/Caddyfile.byo switches to operator-provided
+      # certificates (see deploy/certs/README.md).
+      - ${CADDYFILE:-./deploy/Caddyfile}:/etc/caddy/Caddyfile:ro
+      - ./deploy/certs:/certs:ro
+      # The internal CA and its certificates live here: losing this volume means
+      # every device has to trust the new CA again.
+      - caddy_data:/data
+      - caddy_config:/config
+
+    # Lets the healthcheck reach the site by name from inside the container.
+    extra_hosts:
+      - "${SKLAD_HOST:-sklad.local}:127.0.0.1"
+
+    networks:
+      - sklad
+
+    security_opt:
+      - no-new-privileges:true
+
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+    # The admin API is disabled in the Caddyfile, so probe the real thing: a TLS
+    # request for the API health endpoint checks TLS serving, proxying and SQLite.
+    # It works with either certificate mode, even when /ca.crt is absent.
+    # (Alpine's busybox wget needs --no-check-certificate because the internal CA
+    # is deliberately not in the container's trust store.)
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q --no-check-certificate -O /dev/null https://${SKLAD_HOST:-sklad.local}/api/v1/health || exit 1"]
+      interval: 30s
+      timeout: 5s
+      start_period: 15s
+      retries: 3
+
+volumes:
+  sklad_data:
+  caddy_data:
+  caddy_config:
+
+networks:
+  sklad:
+    driver: bridge

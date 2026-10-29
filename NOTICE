@@ -1,0 +1,41 @@
+Sklad — Equipment Inventory & Lending
+=====================================
+
+Copyright (c) 2026 David Žitník
+
+Created by David Žitník.
+
+This product is open source software licensed under the MIT License (see
+LICENSE). It is an independent, ground-up rewrite of the internal
+"equipment-log" tool; no proprietary third-party code is included.
+
+
+Third-party components
+----------------------
+
+Sklad builds on the following open source projects. The authoritative list of
+exact versions is the dependency manifest (`go.sum` for the backend and
+`web/package-lock.json` for the frontend); each component remains under its own
+license and copyright.
+
+Backend (Go)
+  - Go standard library .................... BSD-3-Clause (The Go Authors)
+  - modernc.org/sqlite ..................... BSD-3-Clause (modernc.org)
+  - github.com/go-chi/chi .................. MIT
+  - golang.org/x/crypto (argon2) ........... BSD-3-Clause (The Go Authors)
+
+Edge / deployment
+  - Caddy ................................... Apache-2.0
+
+Frontend (web)
+  - React ................................... MIT (Meta Platforms, Inc.)
+  - React Router ............................ MIT
+  - Vite .................................... MIT
+  - TypeScript .............................. Apache-2.0 (Microsoft Corporation)
+  - Tailwind CSS ............................ MIT
+  - i18next ................................. MIT
+  - @zxing/library .......................... Apache-2.0 (ZXing Authors)
+  - bwip-js ................................. MIT
+
+License texts for the components above are distributed with their respective
+packages (e.g. under `node_modules/<pkg>/LICENSE` and in the Go module cache).

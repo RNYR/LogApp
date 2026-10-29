@@ -1,0 +1,64 @@
+# =============================================================================
+# Sklad — .dockerignore
+# Keep the build context small and free of secrets. The image is built with a
+# multi-stage Dockerfile (Node build -> Go build -> Alpine runtime), so source
+# trees are required but generated artifacts and local state are not.
+# =============================================================================
+
+# Version control & CI
+.git
+.gitignore
+.github
+
+# Secrets & local configuration (never copy into images)
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.crt
+*.csr
+*.p12
+*.pfx
+certificates/
+
+# Runtime data & databases
+data
+**/data/*.db
+**/*.db
+**/*.db-*
+**/*.sqlite*
+**/*.db-wal
+**/*.db-shm
+
+# Frontend build artifacts & dependencies (rebuilt inside the image). Keep the
+# web/dist/.gitkeep placeholder so //go:embed web/dist still compiles from the
+# build context even before the SPA build runs.
+**/node_modules
+web/dist/*
+!web/dist/.gitkeep
+web/coverage
+web/.vite
+**/playwright-report
+**/test-results
+
+# Go / test artifacts
+**/*.test
+**/*.out
+coverage.out
+
+# Documentation, editor & OS cruft, and legacy reference tree
+docs
+equipment-log
+*.md
+!web/*.md
+.DS_Store
+**/.DS_Store
+.idea
+.vscode
+tmp
+.tmp
+*.log
+
+# Generated NAS bundle (scripts/make-test-bundle)
+sklad-test

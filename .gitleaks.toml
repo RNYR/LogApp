@@ -1,0 +1,48 @@
+# gitleaks configuration — CI secret scanning
+#
+# This file *extends* the default rule set (`useDefault`), it does not replace
+# it, and CI runs both a working-tree scan and a full-history scan with it.
+#
+# Two deliberate additions:
+#   1. a targeted rule for Google/Gmail app passwords — exactly the shape of the
+#      credential that leaked in the legacy `equipment-log` tree, which the
+#      default rules do not catch;
+#   2. narrow allowlists for the two false positives this repository produces.
+
+[extend]
+useDefault = true
+
+# ---------------------------------------------------------------------------
+# Rules
+# ---------------------------------------------------------------------------
+
+[[rules]]
+id = "google-app-password"
+description = "Google/Gmail app password (16 letters in four space-separated groups)"
+# The default rules target API keys and high-entropy strings; a Gmail app
+# password ("abcd efgh ijkl mnop") sits next to an SMTP keyword and slips past
+# them. Three conditions keep the false-positive rate at zero: an SMTP/Gmail
+# keyword earlier on the line, the value introduced by =, : or a quote (so
+# ordinary prose is never matched), and a word boundary after the last group.
+# Note: gitleaks compiles rules with RE2, so lookarounds are not available.
+regex = '''(?i)(?:gmail|google|smtp|app[ _-]?password)[^\n]{0,60}?[=:"']\s*[a-z]{4} [a-z]{4} [a-z]{4} [a-z]{4}\b'''
+tags = ["secret", "google"]
+
+# ---------------------------------------------------------------------------
+# Allowlists
+# ---------------------------------------------------------------------------
+
+[[allowlists]]
+description = "Frontend i18n lookup keys are not credentials: labelKey: 'labels.width12'"
+regexTarget = "match"
+regexes = ['''labelKey:\s*['"]labels\.[A-Za-z0-9._]+['"]''']
+
+[[allowlists]]
+description = "Documented placeholders that appear verbatim in examples and runbooks"
+regexTarget = "match"
+regexes = [
+  # .env.example ships a deliberately unusable password that must not be used.
+  '''SKLAD_ADMIN_PASSWORD=['"]?change-me-on-first-login''',
+  # The test suites and runbooks use this obvious dummy webhook token.
+  '''webhooks/[0-9]+/super-secret-token''',
+]

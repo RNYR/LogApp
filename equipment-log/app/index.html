@@ -1,0 +1,3053 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>PEKAT VISION — Equipment Log</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<style>
+:root{
+  --status-feas:#93c47d;
+  --status-devel:#8faadc;
+  --status-sales:#CC99FF;
+  --status-onsite:#ffd966;
+  --status-loaned:#e06666;
+
+  --bg:rgb(3,46,63);
+  --accent:rgb(10,153,209);
+  --card:rgb(247,250,253);
+
+  --field-border:rgba(0,0,0,0.12);
+  --shadow:0 10px 20px rgba(0,0,0,0.15);
+
+  --w-delete: 34px;
+  --w-id: 80px;
+  --w-sn: 250px;
+  --w-type: 160px;
+  --w-status: 180px;
+  --w-note: 260px;
+  --w-date: 100px;
+  --control-height: 34px;
+  --w-name-min: 430px;
+}
+
+*{box-sizing:border-box;}
+
+body{
+  font-family:'Montserrat', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  background:var(--bg);
+  margin:0;
+  padding:28px;
+  -webkit-font-smoothing:antialiased;
+  overflow-x:hidden;
+}
+
+.top-title{
+  width:min(1900px,100%);
+  margin:0 auto 30px auto;
+  padding:8px 4px;
+  position:relative;
+}
+
+.top-logo{
+  width:100%;
+  display:flex;
+  justify-content:center;
+}
+
+.top-logo img{
+  height:120px;
+}
+
+.container{
+  width:min(1900px,100%);
+  margin:0 auto;
+  background:var(--card);
+  padding:28px;
+  border-radius:18px;
+  box-shadow:0 20px 40px rgba(0,0,0,0.4);
+  height:auto;
+  overflow:visible;
+}
+
+.header-flex{
+  display:grid;
+  grid-template-columns:1fr minmax(220px,600px) 1fr;
+  align-items:center;
+  gap:12px;
+  margin-bottom:20px;
+  min-height:48px;
+}
+
+h2{
+  margin:0;
+  font-weight:500;
+  color:rgba(3,46,63,0.95);
+  position:relative;
+  z-index:1;
+}
+
+.header-actions{
+  display:flex;
+  align-items:center;
+  justify-content:flex-end;
+  gap:12px;
+  flex-wrap:wrap;
+}
+
+.search-wrap{
+  min-width:0;
+  display:flex;
+  justify-content:center;
+}
+
+.search-filter-group{
+  width:100%;
+  max-width:600px;
+  display:flex;
+  align-items:stretch;
+  gap:10px;
+}
+
+.search-filter-dropdown{
+  position:relative;
+  width:48px;
+  flex:0 0 48px;
+}
+
+.filter-trigger{
+  width:48px;
+  height:100%;
+  min-height:48px;
+  border-radius:10px;
+  border:1px solid var(--field-border);
+  background:#fff;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  cursor:pointer;
+  padding:0;
+}
+
+.filter-trigger:hover,
+.filter-trigger.active{
+  border-color:rgba(10,153,209,0.45);
+  box-shadow:0 0 0 3px rgba(10,153,209,0.10);
+}
+
+.filter-trigger svg{
+  width:22px;
+  height:22px;
+  display:block;
+}
+
+.filter-menu{
+  position:absolute;
+  top:calc(100% + 8px);
+  left:0;
+  width:220px;
+  background:#fff;
+  border-radius:10px;
+  box-shadow:var(--shadow);
+  border:1px solid rgba(0,0,0,0.08);
+  overflow:hidden;
+  display:none;
+  z-index:999999;
+}
+
+.search-filter-dropdown.open .filter-menu{
+  display:block;
+}
+
+.filter-option{
+  display:flex;
+  align-items:center;
+  gap:10px;
+  padding:10px 12px;
+  font-size:13px;
+  font-weight:400;
+  cursor:pointer;
+  user-select:none;
+}
+
+.filter-option:hover{
+  background:#2a67c1;
+  color:#fff;
+}
+
+.filter-option input{
+  width:16px;
+  height:16px;
+  margin:0;
+  accent-color:var(--accent);
+  flex:0 0 auto;
+  cursor:pointer;
+}
+
+.filter-option span{
+  flex:1 1 auto;
+}
+
+.search-input{
+  width:100%;
+  max-width:none;
+  flex:1 1 auto;
+  height:48px;
+  min-height:48px;
+  padding:0 14px;
+  border-radius:10px;
+  border:1px solid var(--field-border);
+  font-family:'Montserrat',sans-serif;
+  font-weight:400;
+  font-size:13px;
+  background:#fff;
+  outline:none;
+  box-shadow:none;
+}
+
+.search-input:focus{
+  outline:none;
+  box-shadow:none;
+}
+
+.admin-topbar{
+  display:none;
+  background:var(--accent);
+  color:#fff;
+  padding:8px 14px;
+  border-radius:10px;
+  font-size:13px;
+  font-weight:500;
+  margin-bottom:16px;
+}
+
+.edit-mode{
+  --w-date: 110px;
+}
+
+.edit-mode .admin-topbar{
+  display:block;
+}
+
+.buffer-wrap{
+  display:none;
+  margin:0 0 18px 0;
+  padding:18px;
+  border-radius:16px;
+  background:rgba(10,153,209,0.08);
+  border:1px dashed rgba(10,153,209,0.35);
+}
+
+.buffer-wrap.has-items{
+  display:block;
+}
+
+.buffer-title{
+  margin:0 0 12px 0;
+  font-size:14px;
+  font-weight:600;
+  color:rgba(3,46,63,0.95);
+}
+
+.buffer-note{
+  margin:0 0 14px 0;
+  font-size:12px;
+  color:rgba(3,46,63,0.7);
+}
+
+.buffer-list-outer{
+  overflow-x:auto;
+}
+.buffer-list-outer::-webkit-scrollbar{ height:10px; }
+.buffer-list-outer::-webkit-scrollbar-thumb{ background:rgba(0,0,0,0.14); border-radius:999px; }
+.buffer-list-outer::-webkit-scrollbar-track{ background:rgba(0,0,0,0.04); border-radius:999px; }
+
+.buffer-list{
+  display:block;
+}
+
+.buffer-row + .buffer-row{
+  margin-top:12px;
+}
+
+.buffer-row{
+  display:grid;
+  grid-template-columns: 22px var(--w-id) minmax(var(--w-name-min), 1fr) var(--w-sn) var(--w-type) var(--w-status) var(--w-date) var(--w-date) var(--w-note);
+  gap:12px;
+  align-items:center;
+  padding:12px;
+  border-radius:14px;
+  background:rgba(255,255,255,0.78);
+  backdrop-filter:saturate(140%) blur(2px);
+  box-shadow:0 4px 14px rgba(0,0,0,0.06);
+  min-width:calc(22px + var(--w-id) + var(--w-name-min) + var(--w-sn) + var(--w-type) + var(--w-status) + var(--w-date) + var(--w-date) + var(--w-note) + 8*12px + 2*12px);
+}
+
+.buffer-header{
+  display:flex;
+  align-items:flex-start;
+  justify-content:space-between;
+  gap:16px;
+  margin-bottom:14px;
+}
+
+.buffer-header-text{
+  min-width:0;
+}
+
+.buffer-controls{
+  display:flex;
+  align-items:center;
+  gap:10px;
+  flex-shrink:0;
+}
+
+.buffer-x-btn{
+  width:22px;
+  height:22px;
+  border:none;
+  border-radius:999px;
+  background:transparent;
+  color:rgba(3,46,63,0.6);
+  font-size:16px;
+  line-height:1;
+  cursor:pointer;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  padding:0;
+}
+
+.buffer-x-btn:hover{
+  background:rgba(224,102,102,0.12);
+  color:rgb(224,102,102);
+}
+
+.row-x-btn{
+  width:22px;
+  height:22px;
+  border:none;
+  border-radius:999px;
+  background:transparent;
+  color:rgba(3,46,63,0.6);
+  font-size:16px;
+  line-height:1;
+  cursor:pointer;
+  display:none;
+  align-items:center;
+  justify-content:center;
+  padding:0;
+  margin:0 auto;
+}
+
+.row-x-btn:hover{
+  background:rgba(224,102,102,0.12);
+  color:rgb(224,102,102);
+}
+
+.edit-mode .row-x-btn{
+  display:flex;
+}
+
+.buffer-cell{
+  min-width:0;
+}
+
+.table-wrap{
+  width:100%;
+  overflow-x:auto;
+  overflow-y:hidden;
+}
+
+.table-wrap::-webkit-scrollbar{ height:10px; }
+.table-wrap::-webkit-scrollbar-thumb{ background:rgba(0,0,0,0.14); border-radius:999px; }
+.table-wrap::-webkit-scrollbar-track{ background:rgba(0,0,0,0.04); border-radius:999px; }
+
+table{
+  width:100%;
+  border-collapse:collapse;
+  table-layout:fixed;
+  min-width:calc(var(--w-delete) + var(--w-id) + var(--w-sn) + var(--w-type) + var(--w-status) + var(--w-date) + var(--w-date) + var(--w-note) + var(--w-name-min));
+}
+
+thead th{
+  padding:12px;
+  font-size:11px;
+  text-transform:uppercase;
+  color:rgba(3,46,63,0.5);
+  border-bottom:1px solid rgba(0,0,0,0.1);
+  text-align:left;
+  white-space:nowrap;
+  font-weight:600;
+}
+
+tbody td{
+  padding:12px;
+  border-bottom:1px solid rgba(0,0,0,0.05);
+  vertical-align:middle;
+  font-weight:400;
+  overflow:visible;
+}
+
+tbody tr:nth-child(even){background:#f7fafc;}
+tbody tr:nth-child(odd){background:#e7f0f9;}
+
+th.col-delete, td.col-delete{
+  width:var(--w-delete);
+  display:none;
+  text-align:center;
+  padding-left:8px;
+  padding-right:8px;
+}
+
+.edit-mode th.col-delete,
+.edit-mode td.col-delete{
+  display:table-cell;
+}
+
+th.col-id, td.col-id{width:var(--w-id);font-size:13px;}
+th.col-sn, td.col-sn{width:var(--w-sn);font-size:13px;}
+th.col-type, td.col-type{width:var(--w-type);font-size:13px;}
+th.col-status, td.col-status{width:var(--w-status);}
+th.col-sent-date, td.col-sent-date,
+th.col-return-date, td.col-return-date{width:var(--w-date);}
+th.col-note, td.col-note{width:var(--w-note); position:relative; overflow:visible;}
+
+th.col-name, td.col-name{
+  width:auto;
+  min-width:var(--w-name-min);
+  font-size:13px;
+}
+
+input{
+  width:100%;
+  height:var(--control-height);
+  padding:10px;
+  border-radius:10px;
+  border:1px solid var(--field-border);
+  font-family:'Montserrat',sans-serif;
+  font-weight:400;
+  font-size:13px;
+  background:#fff;
+  outline:none;
+  box-shadow:none;
+}
+input:focus{ outline:none; box-shadow:none; }
+
+.locked{
+  background:transparent;
+  border:0 !important;
+  padding:0 !important;
+  border-radius:0 !important;
+  box-shadow:none !important;
+  outline:none !important;
+  color:rgba(3,46,63,0.95);
+  cursor:default;
+  pointer-events:none;
+  user-select:none;
+  height:auto;
+  line-height:1.25;
+  white-space:nowrap;
+}
+
+.buffer-id-text{
+  height:var(--control-height);
+  display:flex;
+  align-items:center;
+  justify-content:flex-start;
+  padding-left:6px;
+  color:rgba(3,46,63,0.95);
+  font-size:13px;
+  font-weight:400;
+  white-space:nowrap;
+}
+
+.dropdown{
+  position:relative;
+  width:100%;
+}
+
+.no-select,
+.no-select *{
+  user-select:none !important;
+  -webkit-user-select:none !important;
+  -ms-user-select:none !important;
+}
+.no-select::selection{ background:transparent; }
+.no-select *::selection{ background:transparent; }
+.no-select::-moz-selection{ background:transparent; }
+.no-select *::-moz-selection{ background:transparent; }
+
+.dropdown-selected{
+  width:100%;
+  min-height:var(--control-height);
+  padding:10px 34px 10px 10px;
+  border-radius:10px;
+  border:1px solid var(--field-border);
+  background:#fff;
+  display:flex;
+  align-items:center;
+  justify-content:flex-start;
+  font-size:13px;
+  font-weight:400;
+  white-space:nowrap;
+  overflow:hidden;
+  text-overflow:ellipsis;
+  outline:none;
+}
+
+.dropdown-selected::after{
+  content:"▾";
+  position:absolute;
+  right:12px;
+  top:50%;
+  transform:translateY(-50%);
+  font-size:12px;
+  opacity:0.65;
+  pointer-events:none;
+}
+
+.dropdown-menu{
+  position:absolute;
+  top:calc(100% + 8px);
+  left:0;
+  width:100%;
+  background:#fff;
+  border-radius:10px;
+  box-shadow:var(--shadow);
+  overflow:hidden;
+  display:none;
+  z-index:999999;
+  border:1px solid rgba(0,0,0,0.08);
+}
+
+.dropdown.open .dropdown-menu{ display:block; }
+
+.dropdown-item{
+  padding:10px 12px;
+  text-align:center;
+  cursor:pointer;
+  font-size:13px;
+  font-weight:400;
+  user-select:none;
+}
+
+.dropdown-item:hover{
+  background:#2a67c1;
+  color:#fff;
+}
+
+.dropdown-separator{
+  height:1px;
+  background:rgba(0,0,0,0.08);
+  margin:4px 0;
+}
+
+.dropdown-manage-item{
+  display:flex !important;
+  align-items:center !important;
+  justify-content:center !important;
+  padding:8px 10px !important;
+  border-top:1px solid rgba(0,0,0,0.08) !important;
+  cursor:pointer !important;
+  background:none !important;
+}
+
+.dropdown-manage-item:hover .dropdown-manage-btn{
+  background:rgba(10,153,209,0.85) !important;
+}
+
+.dropdown-manage-btn{
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  width:100%;
+  height:28px;
+  background:var(--accent);
+  color:#fff;
+  border-radius:10px;
+  pointer-events:none;
+}
+
+.dropdown.disabled .dropdown-selected{
+  background:transparent;
+  border:0;
+  padding:0;
+  border-radius:0;
+  color:rgba(3,46,63,0.95);
+  cursor:default;
+}
+.dropdown.disabled .dropdown-selected::after{ content:""; }
+.dropdown.disabled .dropdown-menu{ display:none !important; }
+
+.status-feas{ background:var(--status-feas) !important; }
+.status-devel{ background:var(--status-devel) !important; }
+.status-sales{ background:var(--status-sales) !important; }
+.status-customer{ background:var(--status-onsite) !important; }
+.status-loaned{ background:var(--status-loaned) !important; }
+
+.btn{
+  padding:12px 14px;
+  border:none;
+  border-radius:10px;
+  cursor:pointer;
+  font-weight:600;
+  white-space:nowrap;
+  font-family:'Montserrat',sans-serif;
+}
+
+.btn-admin{background:var(--accent);color:#fff;}
+.btn-add{background:var(--accent);color:#fff;}
+.btn-exit{background:#e06666;color:#fff;}
+.btn-secondary{background:rgba(3,46,63,0.12);color:rgba(3,46,63,0.85);border:1px solid rgba(3,46,63,0.18);}
+.btn-secondary:hover{background:rgba(3,46,63,0.20);}
+.btn-subtle{background:rgba(3,46,63,0.12);color:rgba(3,46,63,0.85);border:1px solid rgba(3,46,63,0.18);}
+.btn-subtle:hover{background:rgba(3,46,63,0.20);}
+
+.admin-only{display:none;}
+.edit-mode .admin-only{display:block;}
+
+.dropdown:not(.disabled) .dropdown-selected{ cursor:pointer; }
+
+td.col-name .locked{ white-space:normal; }
+
+.col-note input{
+  padding:10px 12px;
+}
+
+.dropdown-menu.portal{
+  position:fixed !important;
+  display:block !important;
+  z-index:9999999 !important;
+}
+
+.note-cell-wrap{
+  position:relative;
+  width:100%;
+  overflow:visible;
+}
+
+/* note editor (shared admin + normal edit state) */
+.note-editor{display:flex;align-items:center;gap:8px;width:100%;}
+.note-editor input{flex:1;min-width:0;}
+
+.buffer-note-editor{display:flex;align-items:center;gap:10px;width:100%;}
+.buffer-note-editor input{flex:1 1 auto;min-width:0;}
+
+.note-save-btn{background:var(--accent);color:#fff;border:none;border-radius:10px;font-family:'Montserrat',sans-serif;font-size:12px;font-weight:600;cursor:pointer;height:var(--control-height);display:inline-flex;align-items:center;justify-content:center;padding:0 12px;white-space:nowrap;flex:0 0 auto;}
+
+/* normal mode note cell */
+.note-normal-wrap{display:flex;align-items:center;gap:3px;width:100%;}
+.note-normal-input{
+  flex:1;min-width:0;height:var(--control-height);
+  padding:0 12px;
+  border-radius:10px;border:1px solid var(--field-border);
+  background:#fff;color:rgba(3,46,63,0.9);
+  font-size:13px;font-family:'Montserrat',sans-serif;
+  box-sizing:border-box;outline:none;
+}
+.note-normal-wrap.has-note .note-normal-input{cursor:default;}
+.note-normal-wrap:not(.has-note) .note-normal-input{cursor:pointer;}
+.note-normal-input:not([readonly]){border-color:var(--accent);cursor:text;}
+
+/* note action buttons (edit, delete, tick) — shared dimensions */
+.note-icon-btn,.note-tick-btn{
+  width:var(--control-height);height:var(--control-height);
+  border:none;border-radius:10px;
+  cursor:pointer;display:flex;align-items:center;justify-content:center;
+  padding:0;flex:0 0 auto;
+}
+.note-icon-edit{background:var(--accent);color:#fff;}
+.note-icon-edit:hover{background:rgb(8,130,177);}
+.note-icon-del{background:#e06666;color:#fff;font-size:18px;font-weight:700;line-height:1;}
+.note-icon-del:hover{background:rgb(200,80,80);}
+.note-tick-btn{background:#93c47d;color:#fff;}
+.note-tick-btn:hover{background:#7aad64;}
+
+/* hide pencil/× by default; expand on row hover */
+.note-normal-wrap.has-note .note-icon-btn{
+  width:0;height:var(--control-height);
+  padding:0;margin:0;overflow:hidden;opacity:0;
+  pointer-events:none;
+  transition:width 0.15s ease,opacity 0.15s ease;
+}
+.note-normal-wrap.has-note:hover .note-icon-btn{
+  width:var(--control-height);opacity:1;pointer-events:auto;
+}
+
+/* pagination */
+.pagination-bar{
+  margin-top:18px;
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:14px;
+  flex-wrap:wrap;
+}
+
+.pagination-left,
+.pagination-right{
+  display:flex;
+  align-items:center;
+  gap:10px;
+  flex-wrap:wrap;
+}
+
+.entries-label,
+.pagination-info{
+  font-size:13px;
+  color:rgba(3,46,63,0.82);
+  font-weight:500;
+}
+
+.entries-controls{
+  display:flex;
+  align-items:center;
+  gap:8px;
+  flex-wrap:wrap;
+}
+
+.entries-btn,
+.page-btn{
+  border:1px solid rgba(0,0,0,0.12);
+  background:#fff;
+  color:rgba(3,46,63,0.92);
+  border-radius:10px;
+  padding:9px 12px;
+  font-family:'Montserrat',sans-serif;
+  font-size:13px;
+  font-weight:500;
+  cursor:pointer;
+}
+
+.entries-btn.active,
+.page-btn.active{
+  background:var(--accent);
+  color:#fff;
+  border-color:var(--accent);
+}
+
+.entries-btn:disabled,
+.page-btn:disabled{
+  opacity:0.45;
+  cursor:not-allowed;
+}
+
+.page-numbers{
+  display:flex;
+  align-items:center;
+  gap:6px;
+  flex-wrap:wrap;
+}
+
+.page-ellipsis{
+  padding:0 4px;
+  font-size:13px;
+  color:rgba(3,46,63,0.68);
+  font-weight:600;
+}
+
+/* modals */
+.modal-overlay{
+  position:fixed;
+  inset:0;
+  background:rgba(0,0,0,0.42);
+  display:none;
+  align-items:center;
+  justify-content:center;
+  z-index:10000000;
+  padding:20px;
+}
+
+.modal-overlay.show{
+  display:flex;
+}
+
+.modal-box{
+  width:min(520px, 100%);
+  background:#fff;
+  border-radius:18px;
+  box-shadow:0 20px 40px rgba(0,0,0,0.28);
+  padding:24px;
+  overscroll-behavior:contain;
+}
+
+.pass-wrap{
+  position:relative;
+  display:block;
+}
+.pass-wrap input{
+  width:100%;
+  box-sizing:border-box;
+  padding-right:38px !important;
+}
+.pass-eye-btn{
+  position:absolute;
+  right:8px;
+  top:50%;
+  transform:translateY(-50%);
+  background:none;
+  border:none;
+  cursor:pointer;
+  padding:4px;
+  color:rgba(3,46,63,0.4);
+  font-size:15px;
+  line-height:1;
+  user-select:none;
+}
+.pass-eye-btn:hover{
+  color:rgba(3,46,63,0.75);
+}
+
+.modal-title{
+  margin:0 0 10px 0;
+  font-size:20px;
+  font-weight:600;
+  color:rgba(3,46,63,0.95);
+}
+
+.modal-text{
+  margin:0 0 14px 0;
+  font-size:14px;
+  line-height:1.5;
+  color:rgba(3,46,63,0.9);
+}
+
+.modal-footnote{
+  margin:0 0 18px 0;
+  font-size:12px;
+  line-height:1.45;
+  color:rgba(3,46,63,0.65);
+}
+
+.modal-countdown{
+  margin:0 0 18px 0;
+  font-size:13px;
+  font-weight:500;
+  color:rgba(3,46,63,0.8);
+}
+
+.modal-actions{
+  display:flex;
+  gap:10px;
+  justify-content:flex-end;
+  flex-wrap:wrap;
+}
+
+.modal-section-label{font-size:12px;font-weight:700;color:rgba(3,46,63,0.55);text-transform:uppercase;letter-spacing:.05em;margin:0 0 5px 0;}
+.modal-input{width:100%;box-sizing:border-box;border:1px solid var(--field-border);border-radius:10px;padding:8px 12px;font-family:'Montserrat',sans-serif;font-size:14px;color:rgba(3,46,63,0.9);outline:none;background:#fff;}
+.modal-input:focus{border-color:var(--accent);}
+.modal-helper-text{font-size:12px;color:rgba(3,46,63,0.6);margin-top:8px;line-height:1.55;background:#f0f4f8;border-radius:8px;padding:8px 10px;}
+.cc-pills-wrap{display:flex;flex-wrap:wrap;gap:4px;min-height:24px;margin-bottom:6px;}
+.cc-pill{display:inline-flex;align-items:center;gap:5px;background:rgba(10,153,209,0.12);color:var(--accent);border-radius:999px;padding:3px 10px 3px 12px;font-size:13px;font-weight:500;}
+.cc-pill-x{cursor:pointer;font-size:15px;line-height:1;color:rgba(10,153,209,0.55);margin-left:2px;}
+.cc-pill-x:hover{color:var(--accent);}
+.email-test-result{margin-top:8px;font-size:13px;font-weight:500;min-height:18px;}
+.email-test-result.ok{color:#3a9a5c;}
+.email-test-result.err{color:#e06666;}
+.email-test-result.warn{color:rgba(3,46,63,0.55);}
+#email-save-btn:disabled{background:#c8e6f5;color:#fff;cursor:default;}
+
+.date-display-box{
+  min-height:var(--control-height);
+  width:100%;
+  padding:10px 12px;
+  border-radius:10px;
+  border:1px solid var(--field-border);
+  background:#fff;
+  color:rgba(3,46,63,0.9);
+  font-size:13px;
+  display:flex;
+  align-items:center;
+}
+
+.date-display-box.empty{
+  background:transparent;
+  border:1px dashed rgba(0,0,0,0.08);
+  color:rgba(3,46,63,0.35);
+}
+
+.date-inline-text{
+  display:block;
+  width:100%;
+  color:rgba(3,46,63,0.9);
+  font-size:13px;
+  line-height:1.35;
+}
+
+.date-modal-grid{
+  display:grid;
+  grid-template-columns:1fr 1fr;
+  gap:12px;
+  margin:0 0 18px 0;
+}
+
+.date-modal-field label{
+  display:block;
+  margin:0 0 8px 0;
+  font-size:12px;
+  font-weight:600;
+  color:rgba(3,46,63,0.8);
+  text-transform:uppercase;
+}
+
+.date-modal-field input{
+  width:100%;
+}
+
+/* options manager */
+.options-list{
+  max-height:280px;
+  overflow-y:auto;
+  margin-bottom:12px;
+  border:1px solid var(--field-border);
+  border-radius:10px;
+  overscroll-behavior:contain;
+}
+
+.options-item{
+  display:flex;
+  align-items:center;
+  gap:8px;
+  padding:8px 12px;
+  border-bottom:1px solid var(--field-border);
+  min-height:42px;
+}
+
+.options-item:last-child{ border-bottom:0; }
+
+.options-item-label{
+  flex:1;
+  font-size:13px;
+  color:rgba(3,46,63,0.9);
+  cursor:text;
+  padding:4px 6px;
+  border-radius:6px;
+  border:1px solid transparent;
+  min-width:0;
+  white-space:nowrap;
+  overflow:hidden;
+  text-overflow:ellipsis;
+}
+
+.options-item-label:hover{
+  border-color:var(--field-border);
+  background:#fff;
+}
+
+.options-item-label.editing{
+  border-color:var(--accent);
+  background:#fff;
+  outline:none;
+}
+
+.options-item-color-swatch{
+  width:20px;
+  height:20px;
+  border-radius:5px;
+  flex-shrink:0;
+  border:2px solid rgba(0,0,0,0.12);
+  cursor:pointer;
+}
+
+.options-item-color-swatch.active{
+  border-color:rgba(3,46,63,0.6);
+  box-shadow:0 0 0 2px rgba(3,46,63,0.15);
+}
+
+.options-item-delete{
+  width:24px;
+  height:24px;
+  border:none;
+  background:transparent;
+  color:rgba(3,46,63,0.4);
+  font-size:16px;
+  cursor:pointer;
+  border-radius:6px;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  flex-shrink:0;
+  padding:0;
+  line-height:1;
+}
+
+.options-item-delete:hover{
+  background:rgba(224,102,102,0.12);
+  color:#e06666;
+}
+
+.options-item-delete:disabled{
+  opacity:0.25;
+  cursor:not-allowed;
+}
+
+.options-add-row{
+  display:flex;
+  gap:8px;
+  margin-bottom:0;
+}
+
+.options-add-row input{
+  flex:1;
+  height:var(--control-height);
+}
+
+.options-colors-row{
+  display:flex;
+  gap:6px;
+  flex-wrap:wrap;
+  margin-top:4px;
+  padding:4px 0;
+}
+
+.color-chip{
+  width:22px;
+  height:22px;
+  border-radius:6px;
+  cursor:pointer;
+  border:2px solid transparent;
+  flex-shrink:0;
+}
+
+.color-chip.selected{
+  border-color:rgba(3,46,63,0.6);
+  box-shadow:0 0 0 2px rgba(3,46,63,0.15);
+}
+
+.color-chip-add{
+  width:22px;
+  height:22px;
+  border-radius:6px;
+  cursor:pointer;
+  border:2px dashed rgba(0,0,0,0.2);
+  flex-shrink:0;
+  background:#fff;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  font-size:15px;
+  color:rgba(0,0,0,0.35);
+  line-height:1;
+  transition:border-color 0.15s, border-style 0.15s;
+  padding:0;
+}
+.color-chip-add:hover{
+  border-style:solid;
+  border-color:rgba(0,0,0,0.4);
+  color:rgba(0,0,0,0.55);
+}
+.color-chip-add.selected{
+  border-style:solid;
+  border-color:rgba(3,46,63,0.6);
+  box-shadow:0 0 0 2px rgba(3,46,63,0.15);
+}
+#color-picker-popover{
+  position:fixed;
+  z-index:10000001;
+  background:#fff;
+  border-radius:14px;
+  box-shadow:var(--shadow);
+  padding:14px;
+  width:220px;
+  display:none;
+}
+#cp-canvas-sv{
+  border-radius:8px;
+  cursor:crosshair;
+  display:block;
+  width:192px;
+  height:120px;
+}
+#cp-canvas-hue{
+  border-radius:6px;
+  cursor:pointer;
+  display:block;
+  margin-top:8px;
+  width:192px;
+  height:16px;
+}
+.cp-preview-row{
+  display:flex;
+  align-items:center;
+  gap:8px;
+  margin-top:10px;
+}
+#cp-preview{
+  width:28px;
+  height:28px;
+  border-radius:6px;
+  border:1px solid rgba(0,0,0,0.15);
+  flex-shrink:0;
+}
+#cp-hex-input{
+  flex:1;
+  border:1px solid rgba(0,0,0,0.18);
+  border-radius:8px;
+  padding:5px 8px;
+  font-family:'Montserrat',sans-serif;
+  font-size:13px;
+  outline:none;
+}
+#cp-hex-input:focus{ border-color:var(--accent); }
+.cp-actions{
+  display:flex;
+  justify-content:flex-end;
+  margin-top:10px;
+}
+
+@media(max-width:1400px){
+  table{
+    min-width:calc(var(--w-delete) + var(--w-id) + var(--w-sn) + var(--w-type) + var(--w-status) + var(--w-date) + var(--w-date) + var(--w-note) + var(--w-name-min));
+  }
+}
+
+@media(max-width:900px){
+  .header-flex{
+    display:grid;
+    grid-template-columns:1fr;
+  }
+  .search-wrap{
+    position:static;
+    left:auto;
+    transform:none;
+    width:100%;
+  }
+  .header-actions,
+  .search-wrap{
+    justify-content:flex-start;
+  }
+  .search-filter-group{
+    max-width:none;
+  }
+  .pagination-bar{
+    align-items:flex-start;
+  }
+}
+
+@media(max-width:720px){
+  body{ padding:16px; }
+  .top-logo img{ height:32px; }
+  .container{ padding:18px; }
+}
+</style>
+</head>
+<body>
+
+<div class="top-title">
+  <div class="top-logo">
+    <img src="/resources/logo.svg?v=2" alt="PEKAT VISION">
+  </div>
+</div>
+
+<div class="container" id="container">
+  <div class="admin-topbar" id="admin-topbar">Editing as admin</div>
+
+  <div class="header-flex">
+    <div style="display:flex;align-items:center;gap:20px">
+      <h2>Equipment Log</h2>
+      <button class="btn btn-subtle admin-only" id="btn-email-settings" onclick="openEmailModal()">&#9993; Alert Settings</button>
+    </div>
+    <div class="search-wrap">
+      <div class="search-filter-group">
+        <div class="search-filter-dropdown" id="filter-dd">
+          <button class="filter-trigger" id="filter-btn" onclick="toggleFilterMenu()">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/>
+            </svg>
+          </button>
+          <div class="filter-menu" id="filter-menu"></div>
+        </div>
+        <input type="text" class="search-input" id="search-input" placeholder="Filter by ID, ITEM NAME, SN/PN, TYPE, STATUS, NOTE…" oninput="onSearch(this.value)">
+      </div>
+    </div>
+    <div class="header-actions">
+      <button class="btn btn-subtle" id="btn-add-entry" onclick="addBufferEntry()">+ Add New Entry</button>
+      <button class="btn btn-admin" id="btn-edit-mode" onclick="openLoginModal()">ADMIN MODE</button>
+      <button class="btn btn-add admin-only" id="btn-save-exit" onclick="exitAdmin(true)">SAVE AND EXIT</button>
+      <button class="btn btn-exit admin-only" id="btn-exit" onclick="exitAdmin(false)">EXIT</button>
+    </div>
+  </div>
+
+  <div id="buffer-wrap" class="buffer-wrap">
+    <div class="buffer-header">
+      <div class="buffer-header-text">
+        <div class="buffer-title">New Entries (unsaved)</div>
+        <div class="buffer-note" id="buffer-sub"></div>
+      </div>
+      <div class="buffer-controls">
+        <button class="btn btn-add" onclick="saveBuffer()">Save</button>
+        <button class="btn btn-secondary" onclick="clearBuffer()">Cancel</button>
+      </div>
+    </div>
+    <div class="buffer-list-outer">
+      <div class="buffer-list" id="buffer-list"></div>
+    </div>
+  </div>
+
+  <div class="table-wrap">
+    <table id="inv-table">
+      <thead>
+        <tr>
+          <th class="col-delete"></th>
+          <th class="col-id">ID</th>
+          <th class="col-name">Item Name</th>
+          <th class="col-sn">SN/PN</th>
+          <th class="col-type">Type</th>
+          <th class="col-status">Status</th>
+          <th class="col-sent-date">Sent</th>
+          <th class="col-return-date">Return</th>
+          <th class="col-note">Note</th>
+        </tr>
+      </thead>
+      <tbody id="inv-tbody"></tbody>
+    </table>
+  </div>
+
+  <div class="pagination-bar">
+    <div class="pagination-left">
+      <span class="entries-label">Show entries:</span>
+      <div class="entries-controls" id="entries-controls"></div>
+      <span class="pagination-info" id="pagination-info"></span>
+    </div>
+    <div class="pagination-right">
+      <div class="page-numbers" id="page-numbers"></div>
+    </div>
+  </div>
+</div>
+
+<!-- Modal: Admin Login -->
+<div class="modal-overlay" id="login-modal">
+  <div class="modal-box">
+    <div class="modal-title">Admin Login</div>
+    <div style="display:grid;gap:10px;margin-bottom:18px">
+      <input type="text" id="login-user" placeholder="Username" autocomplete="username">
+      <div class="pass-wrap">
+        <input type="password" id="login-pass" placeholder="Password" autocomplete="current-password">
+        <button type="button" class="pass-eye-btn" onclick="togglePassVis('login-pass',this)" tabindex="-1">&#128065;</button>
+      </div>
+      <div id="login-err" style="font-size:12px;color:#e06666;display:none">Invalid credentials</div>
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-secondary" onclick="closeLoginModal()">Cancel</button>
+      <button class="btn btn-admin" onclick="submitLogin()">Login</button>
+    </div>
+  </div>
+</div>
+
+<!-- Modal: Admin Timeout -->
+<div class="modal-overlay" id="timeout-modal">
+  <div class="modal-box">
+    <div class="modal-title">Still working?</div>
+    <div class="modal-text">Are you still working on editing the log?</div>
+    <div class="modal-countdown">Auto-exiting in <span id="timeout-secs">60</span>s…</div>
+    <div class="modal-actions">
+      <button class="btn btn-secondary" onclick="timeoutNo()">No, exit</button>
+      <button class="btn btn-admin" onclick="timeoutYes()">Yes, keep editing</button>
+    </div>
+  </div>
+</div>
+
+<!-- Modal: Status Date -->
+<div class="modal-overlay" id="date-modal">
+  <div class="modal-box">
+    <div class="modal-title">Set shipment dates</div>
+    <div class="modal-footnote">Status changed to <strong id="date-modal-status-label"></strong></div>
+    <div class="date-modal-grid">
+      <div class="date-modal-field">
+        <label>Sent Date</label>
+        <input type="date" id="date-sent-input">
+      </div>
+      <div class="date-modal-field">
+        <label>Return Date</label>
+        <input type="date" id="date-return-input">
+      </div>
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-secondary" onclick="closeDateModal(false)">Cancel</button>
+      <button class="btn btn-admin" onclick="closeDateModal(true)">Save</button>
+    </div>
+  </div>
+</div>
+
+<!-- Modal: Options Manager -->
+<div class="modal-overlay" id="options-modal">
+  <div class="modal-box" style="max-width:460px">
+    <div class="modal-title" id="options-modal-title">Manage Options</div>
+    <div class="options-list" id="options-list"></div>
+    <div class="options-add-row">
+      <input type="text" id="options-new-input" placeholder="New option…" onkeydown="if(event.key==='Enter')addOption()">
+      <button class="btn btn-add" onclick="addOption()">Add</button>
+    </div>
+    <div class="modal-actions" style="margin-top:14px">
+      <button class="btn btn-secondary" onclick="closeOptionsModal()">Cancel</button>
+      <button class="btn btn-admin" onclick="saveOptionsModal()">Save</button>
+    </div>
+  </div>
+</div>
+
+<!-- Color Picker Popover -->
+<div id="color-picker-popover">
+  <canvas id="cp-canvas-sv" width="192" height="120"
+    onmousedown="cpSVMousedown(event)"></canvas>
+  <canvas id="cp-canvas-hue" width="192" height="16"
+    onmousedown="cpHueMousedown(event)"></canvas>
+  <div class="cp-preview-row">
+    <div id="cp-preview"></div>
+    <input id="cp-hex-input" type="text" maxlength="7" placeholder="#rrggbb"
+      oninput="cpHexInput(this.value)">
+  </div>
+  <div class="cp-actions">
+    <button class="btn btn-admin" onclick="applyColorPicker()">Apply</button>
+  </div>
+</div>
+
+<!-- Modal: Confirm -->
+<div class="modal-overlay" id="confirm-modal">
+  <div class="modal-box" id="confirm-box">
+    <div class="modal-text" id="confirm-msg" style="margin-bottom:0;font-size:15px"></div>
+    <div id="confirm-detail" style="display:none;margin-top:10px;font-size:16px;font-weight:700;color:rgba(3,46,63,0.95)"></div>
+    <div class="modal-actions" style="margin-top:22px">
+      <button class="btn btn-secondary" onclick="confirmCancel()">Cancel</button>
+      <button class="btn btn-admin" id="confirm-ok-btn" onclick="confirmOK()">Confirm</button>
+    </div>
+  </div>
+</div>
+
+<!-- Modal: Alert Settings -->
+<div class="modal-overlay" id="email-modal">
+  <div class="modal-box" style="max-width:520px;max-height:90vh;overflow-y:auto">
+    <div class="modal-title">Alert Settings</div>
+
+    <div class="modal-section-label">TO (main recipient)</div>
+    <input id="email-to" class="modal-input" type="email" placeholder="office@example.com" oninput="markEmailDirty()">
+
+    <div class="modal-section-label" style="margin-top:16px">CC Recipients</div>
+    <div class="cc-pills-wrap" id="cc-pills"></div>
+    <div style="display:flex;gap:8px">
+      <input id="cc-input" class="modal-input" type="email" placeholder="Add CC address…" style="flex:1" onkeydown="if(event.key==='Enter'){event.preventDefault();addCCPill();}">
+      <button class="btn btn-secondary" style="padding:8px 14px" onclick="addCCPill()">Add</button>
+    </div>
+
+    <hr style="border:none;border-top:1px solid var(--field-border);margin:18px 0">
+
+    <div style="display:flex;gap:10px;align-items:center">
+      <button class="btn btn-secondary" style="padding:8px 14px;font-size:13px" onclick="toggleSenderSection()" id="btn-change-sender">Change Sender Account</button>
+      <button class="btn btn-secondary" style="padding:8px 14px;font-size:13px" onclick="sendTestEmail()">Send Test Email</button>
+    </div>
+    <div class="email-test-result" id="email-test-result" style="margin-top:8px"></div>
+
+    <div id="sender-section" style="display:none;margin-top:14px">
+      <div class="modal-section-label">Email Address</div>
+      <input id="sender-email" class="modal-input" type="email" oninput="markEmailDirty();onSenderEmailChange(this.value)">
+      <div class="modal-section-label" style="margin-top:10px">App Password</div>
+      <div class="pass-wrap">
+        <input id="sender-pass" class="modal-input" type="password" placeholder="Leave blank to keep current" oninput="markEmailDirty()">
+        <button type="button" class="pass-eye-btn" onclick="togglePassVis('sender-pass',this)" tabindex="-1">&#128065;</button>
+      </div>
+      <div id="smtp-manual" style="display:none">
+        <div class="modal-section-label" style="margin-top:10px">SMTP Host</div>
+        <input id="smtp-host-input" class="modal-input" type="text" placeholder="smtp.example.com" oninput="markEmailDirty()">
+        <div class="modal-section-label" style="margin-top:10px">SMTP Port</div>
+        <input id="smtp-port-input" class="modal-input" type="text" value="587" style="max-width:100px" oninput="markEmailDirty()">
+      </div>
+      <div id="sender-help" class="modal-helper-text" style="display:none"></div>
+    </div>
+
+    <div class="modal-actions" style="margin-top:18px">
+      <button class="btn btn-secondary" onclick="exitEmailModal()">EXIT</button>
+      <button class="btn btn-admin" id="email-save-btn" onclick="saveEmailSettings()" disabled>Save</button>
+    </div>
+  </div>
+</div>
+
+<script>
+// ============================================================
+// STATE
+// ============================================================
+
+const editorToken = (() => {
+  let t = sessionStorage.getItem('editorToken');
+  if (!t) { t = Math.random().toString(36).slice(2) + Date.now().toString(36); sessionStorage.setItem('editorToken', t); }
+  return t;
+})();
+
+let items = [];
+let options = { types: [], statuses: [] };
+let adminMode = false;
+let adminDraft = null;
+let normalBuffer = [];
+let adminBuffer = [];
+let currentPage = 1;
+let pageSize = (() => { const s = localStorage.getItem('pageSize'); return s ? (s === 'all' ? 'all' : parseInt(s)) : 10; })();
+let searchQuery = '';
+let searchCols = new Set(['id','name','sn','type','status','note']);
+let adminTimer = null;
+let adminTimeoutInterval = null;
+
+// Date modal state
+let datePending = null; // {ctx, idx, newStatus, prevStatus}
+
+// Options modal state
+let optionsField = null;
+let optionsEditCopy = null;
+let optionsPendingColors = {}; // idx -> cls string (for status options)
+let typeRenameMap = new Map();    // origValue -> newValue (tracked per modal session)
+let statusRenameMap = new Map();  // origValue -> newValue
+
+// Dropdown portal
+let currentOpenDropdown = null; // {dd, menu, trigger, origParent}
+
+// Admin credentials (stored after login for API calls during session)
+let adminCreds = { username: '', password: '' };
+
+// Email modal state
+let emailCCList = [];
+let emailDirty = false;
+
+// ============================================================
+// UTILS
+// ============================================================
+
+function esc(s) {
+  return String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+function togglePassVis(inputId, btn) {
+  const inp = document.getElementById(inputId);
+  const show = inp.type === 'password';
+  inp.type = show ? 'text' : 'password';
+  btn.innerHTML = show ? '&#128274;' : '&#128065;';
+}
+
+function fmtDate(iso) {
+  if (!iso) return '';
+  const d = new Date(iso + 'T00:00:00');
+  return `${d.getMonth()+1}/${d.getDate()}/${d.getFullYear()}`;
+}
+
+function statusCls(statusValue) {
+  const s = options.statuses.find(x => x.value === statusValue);
+  return s ? s.cls : '';
+}
+
+function statusLabel(statusValue) {
+  const s = options.statuses.find(x => x.value === statusValue);
+  return s ? s.label : statusValue;
+}
+
+function needsDates(statusValue) {
+  return statusValue === 'Customer' || statusValue === 'Loaned';
+}
+
+// ============================================================
+// API
+// ============================================================
+
+async function apiPost(url, body) {
+  const r = await fetch(url, { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body) });
+  return r.json();
+}
+
+async function apiPut(url, body) {
+  const r = await fetch(url, { method:'PUT', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body) });
+  return r.json();
+}
+
+async function apiDelete(url, body) {
+  const r = await fetch(url, { method:'DELETE', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body) });
+  return r.json();
+}
+
+async function acquireLock(mode) {
+  return apiPost('/api/lock', { token: editorToken, mode });
+}
+
+async function releaseLock() {
+  try { await apiDelete('/api/lock', { token: editorToken }); } catch(e) {}
+}
+
+async function saveInventory(itemsList) {
+  const d = await apiPut('/api/inventory', { token: editorToken, items: itemsList });
+  if (!d.ok) throw new Error(d.error || 'save failed');
+  return d;
+}
+
+function sortTypes(arr) {
+  arr.sort((a, b) => a.toLowerCase().localeCompare(b.toLowerCase()));
+}
+
+async function loadData() {
+  const [invRes, optRes] = await Promise.all([fetch('/api/inventory'), fetch('/api/options')]);
+  const inv = await invRes.json();
+  items = inv.items || [];
+  options = await optRes.json();
+  if (!options.types) options.types = [];
+  if (!options.statuses) options.statuses = [];
+  sortTypes(options.types);
+}
+
+// ============================================================
+// DROPDOWN PORTAL
+// ============================================================
+
+function openDropdown(dd) {
+  closeAllDropdowns();
+  const trigger = dd.querySelector('.dropdown-selected');
+  const menu = dd.querySelector('.dropdown-menu');
+  const origParent = menu.parentElement;
+  const btnRect = trigger.getBoundingClientRect();
+
+  document.body.appendChild(menu);
+  menu.classList.add('portal');
+
+  // measure with visibility hidden so there's no flash
+  menu.style.visibility = 'hidden';
+  menu.style.display = 'block';
+  menu.style.position = 'fixed';
+  menu.style.width = btnRect.width + 'px';
+  menu.style.maxHeight = '280px';
+  menu.style.overflowY = 'auto';
+  const menuRect = menu.getBoundingClientRect();
+
+  const gap = 8;
+  const buffer = 12;
+  let top = btnRect.bottom + gap;
+  if (top + menuRect.height > window.innerHeight - buffer) {
+    top = btnRect.top - gap - menuRect.height;
+  }
+
+  menu.style.left = btnRect.left + 'px';
+  menu.style.top = top + 'px';
+  menu.style.visibility = 'visible';
+
+  dd.classList.add('open');
+  currentOpenDropdown = { dd, menu, trigger, origParent };
+}
+
+function closeAllDropdowns() {
+  if (!currentOpenDropdown) return;
+  const { dd, menu, origParent } = currentOpenDropdown;
+  if (menu.parentElement === document.body) origParent.appendChild(menu);
+  menu.classList.remove('portal');
+  menu.style.cssText = '';
+  dd.classList.remove('open');
+  currentOpenDropdown = null;
+}
+
+function positionMenu(menu, trigger) {
+  const btnRect = trigger.getBoundingClientRect();
+  const gap = 8;
+  const buffer = 12;
+  let top = btnRect.bottom + gap;
+  if (top + menu.getBoundingClientRect().height > window.innerHeight - buffer) {
+    top = btnRect.top - gap - menu.getBoundingClientRect().height;
+  }
+  menu.style.left = btnRect.left + 'px';
+  menu.style.top = top + 'px';
+  menu.style.width = btnRect.width + 'px';
+}
+
+window.addEventListener('scroll', () => {
+  if (currentOpenDropdown) positionMenu(currentOpenDropdown.menu, currentOpenDropdown.trigger);
+}, true);
+
+window.addEventListener('resize', () => { closeAllDropdowns(); });
+
+document.addEventListener('mousedown', e => {
+  if (!currentOpenDropdown) return;
+  const { dd, menu } = currentOpenDropdown;
+  if (!dd.contains(e.target) && !menu.contains(e.target)) closeAllDropdowns();
+});
+
+// ============================================================
+// BUILD DROPDOWN HTML
+// ============================================================
+
+// context: 'buf-type' | 'buf-status' | 'tbl-type' | 'tbl-status-normal' | 'tbl-status-admin'
+function buildTypeDropdown(value, rowIdx, ctx) {
+  const canManage = ctx !== 'tbl-status-normal';
+  const items_ = options.types;
+  const manageHtml = canManage
+    ? `<div class="dropdown-manage-item" data-action="manage"><span class="dropdown-manage-btn"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 3a2.85 2.85 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/><path d="m15 5 4 4"/></svg></span></div>`
+    : '';
+  const optHtml = items_.map(t =>
+    `<div class="dropdown-item" data-value="${esc(t)}">${esc(t)}</div>`
+  ).join('');
+  return `<div class="dropdown no-select" data-ctx="${ctx}" data-rowidx="${rowIdx}">
+    <div class="dropdown-selected">${esc(value || '—')}</div>
+    <div class="dropdown-menu">${optHtml}${manageHtml}</div>
+  </div>`;
+}
+
+function buildStatusDropdown(value, rowIdx, ctx) {
+  const canManage = ctx === 'buf-status' || ctx === 'tbl-status-admin';
+  const cls = statusCls(value);
+  const lbl = statusLabel(value) || value || '—';
+  const optHtml = options.statuses.map(s =>
+    `<div class="dropdown-item ${s.cls}" data-value="${esc(s.value)}">${esc(s.label)}</div>`
+  ).join('');
+  const manageHtml = canManage
+    ? `<div class="dropdown-manage-item" data-action="manage"><span class="dropdown-manage-btn"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 3a2.85 2.85 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/><path d="m15 5 4 4"/></svg></span></div>`
+    : '';
+  return `<div class="dropdown no-select" data-ctx="${ctx}" data-rowidx="${rowIdx}">
+    <div class="dropdown-selected ${cls}">${esc(lbl)}</div>
+    <div class="dropdown-menu">${optHtml}${manageHtml}</div>
+  </div>`;
+}
+
+function attachDropdownEvents(dd) {
+  const trigger = dd.querySelector('.dropdown-selected');
+  const menu = dd.querySelector('.dropdown-menu');
+  if (!trigger || !menu) return;
+
+  trigger.addEventListener('click', e => {
+    e.stopPropagation();
+    if (dd.classList.contains('disabled')) return;
+    if (currentOpenDropdown && currentOpenDropdown.dd === dd) { closeAllDropdowns(); return; }
+    openDropdown(dd);
+  });
+
+  menu.querySelectorAll('.dropdown-item:not(.dropdown-manage-item)').forEach(item => {
+    item.addEventListener('mousedown', e => {
+      e.stopPropagation();
+      const val = item.dataset.value;
+      const ctx = dd.dataset.ctx;
+      const rowIdx = parseInt(dd.dataset.rowidx);
+      closeAllDropdowns();
+      onDropdownSelect(ctx, rowIdx, val);
+    });
+  });
+
+  const manageItem = menu.querySelector('.dropdown-manage-item');
+  if (manageItem) {
+    manageItem.addEventListener('mousedown', e => {
+      e.stopPropagation();
+      const ctx = dd.dataset.ctx;
+      closeAllDropdowns();
+      const field = ctx.includes('type') ? 'type' : 'status';
+      openOptionsManager(field);
+    });
+  }
+}
+
+function reattachDropdowns(container) {
+  container.querySelectorAll('.dropdown').forEach(dd => attachDropdownEvents(dd));
+}
+
+// ============================================================
+// DROPDOWN SELECT HANDLER
+// ============================================================
+
+async function onDropdownSelect(ctx, rowIdx, value) {
+  if (ctx === 'buf-type') {
+    getBuffer()[rowIdx].type = value;
+    renderBuffer();
+  } else if (ctx === 'buf-status') {
+    const buf = getBuffer();
+    const prev = buf[rowIdx].status;
+    if (needsDates(value)) {
+      datePending = { ctx, idx: rowIdx, newStatus: value, prevStatus: prev };
+      showDateModal(value);
+    } else {
+      buf[rowIdx].status = value;
+      buf[rowIdx].sentDate = '';
+      buf[rowIdx].returnDate = '';
+      renderBuffer();
+    }
+  } else if (ctx === 'tbl-type') {
+    adminDraft[rowIdx].type = value;
+    resetAdminTimer();
+    renderTable();
+  } else if (ctx === 'tbl-status-admin') {
+    const prev = adminDraft[rowIdx].status;
+    if (needsDates(value)) {
+      datePending = { ctx, idx: rowIdx, newStatus: value, prevStatus: prev };
+      showDateModal(value);
+    } else {
+      adminDraft[rowIdx].status = value;
+      adminDraft[rowIdx].sentDate = '';
+      adminDraft[rowIdx].returnDate = '';
+      resetAdminTimer();
+      renderTable();
+    }
+  } else if (ctx === 'tbl-status-normal') {
+    await normalStatusChange(rowIdx, value);
+  }
+}
+
+async function normalStatusChange(rowIdx, newStatus) {
+  // Check for admin lock
+  let invData;
+  try {
+    const r = await fetch('/api/inventory');
+    invData = await r.json();
+  } catch(e) { return; }
+
+  if (invData.lock && invData.lock.active && invData.lock.mode === 'admin') {
+    alert('Someone is currently in admin mode. Refreshing data…');
+    items = invData.items || [];
+    renderAll();
+    return;
+  }
+
+  const prev = items[rowIdx].status;
+  const prevSent = items[rowIdx].sentDate;
+  const prevReturn = items[rowIdx].returnDate;
+
+  if (needsDates(newStatus)) {
+    datePending = { ctx: 'tbl-status-normal', idx: rowIdx, newStatus, prevStatus: prev };
+    showDateModal(newStatus);
+  } else {
+    items[rowIdx].status = newStatus;
+    items[rowIdx].sentDate = '';
+    items[rowIdx].returnDate = '';
+    try {
+      const lr = await acquireLock('normal');
+      if (!lr.ok) {
+        items[rowIdx].status = prev;
+        items[rowIdx].sentDate = prevSent;
+        items[rowIdx].returnDate = prevReturn;
+        alert('Could not acquire lock: editor is busy');
+        renderAll();
+        return;
+      }
+      await saveInventory(items);
+      await releaseLock();
+    } catch(e) {
+      items[rowIdx].status = prev;
+      items[rowIdx].sentDate = prevSent;
+      items[rowIdx].returnDate = prevReturn;
+      alert('Save failed: ' + e.message);
+    }
+    renderAll();
+  }
+}
+
+// ============================================================
+// DATE MODAL
+// ============================================================
+
+function showDateModal(statusValue) {
+  document.getElementById('date-modal-status-label').textContent = statusLabel(statusValue) || statusValue;
+  document.getElementById('date-sent-input').value = '';
+  document.getElementById('date-return-input').value = '';
+  document.getElementById('date-modal').classList.add('show');
+}
+
+function openDateEditModal(idx) {
+  const item = adminDraft[idx];
+  datePending = { ctx: 'tbl-date-edit', idx, newStatus: item.status, prevStatus: item.status };
+  document.getElementById('date-modal-status-label').textContent = statusLabel(item.status) || item.status;
+  document.getElementById('date-sent-input').value = item.sentDate || '';
+  document.getElementById('date-return-input').value = item.returnDate || '';
+  document.getElementById('date-modal').classList.add('show');
+}
+
+async function closeDateModal(save) {
+  document.getElementById('date-modal').classList.remove('show');
+  if (!datePending) return;
+  const { ctx, idx, newStatus, prevStatus } = datePending;
+  datePending = null;
+
+  if (!save) {
+    // Revert — just re-render (status wasn't actually applied yet)
+    renderAll();
+    return;
+  }
+
+  const sentDate = document.getElementById('date-sent-input').value;
+  const returnDate = document.getElementById('date-return-input').value;
+
+  if (ctx === 'buf-type' || ctx === 'buf-status') {
+    const buf = getBuffer();
+    buf[idx].status = newStatus;
+    buf[idx].sentDate = sentDate;
+    buf[idx].returnDate = returnDate;
+    renderBuffer();
+  } else if (ctx === 'tbl-status-admin' || ctx === 'tbl-date-edit') {
+    adminDraft[idx].status = newStatus;
+    adminDraft[idx].sentDate = sentDate;
+    adminDraft[idx].returnDate = returnDate;
+    resetAdminTimer();
+    renderTable();
+  } else if (ctx === 'tbl-status-normal') {
+    const prevSent = items[idx].sentDate;
+    const prevReturn = items[idx].returnDate;
+    items[idx].status = newStatus;
+    items[idx].sentDate = sentDate;
+    items[idx].returnDate = returnDate;
+    try {
+      const lr = await acquireLock('normal');
+      if (!lr.ok) {
+        items[idx].status = prevStatus;
+        items[idx].sentDate = prevSent;
+        items[idx].returnDate = prevReturn;
+        alert('Could not acquire lock');
+        renderAll();
+        return;
+      }
+      await saveInventory(items);
+      await releaseLock();
+    } catch(e) {
+      items[idx].status = prevStatus;
+      items[idx].sentDate = prevSent;
+      items[idx].returnDate = prevReturn;
+      alert('Save failed: ' + e.message);
+    }
+    renderAll();
+  }
+}
+
+// ============================================================
+// ADMIN MODE
+// ============================================================
+
+function openLoginModal() {
+  document.getElementById('login-user').value = '';
+  document.getElementById('login-pass').value = '';
+  document.getElementById('login-err').style.display = 'none';
+  document.getElementById('login-modal').classList.add('show');
+  setTimeout(() => document.getElementById('login-user').focus(), 50);
+}
+
+function closeLoginModal() {
+  document.getElementById('login-modal').classList.remove('show');
+}
+
+async function submitLogin() {
+  const username = document.getElementById('login-user').value.trim();
+  const password = document.getElementById('login-pass').value;
+  if (!username || !password) return;
+
+  try {
+    const d = await apiPost('/api/admin-auth', { username, password });
+    if (!d.ok) { document.getElementById('login-err').style.display = 'block'; return; }
+  } catch(e) { alert('Auth error'); return; }
+
+  closeLoginModal();
+  adminCreds = { username, password };
+
+  const lr = await acquireLock('admin');
+  if (!lr.ok) {
+    if (lr.lock && lr.lock.mode === 'admin') {
+      alert('Another user is already in admin mode.');
+    } else {
+      alert('Could not acquire lock. Try again shortly.');
+    }
+    return;
+  }
+
+  adminMode = true;
+  adminDraft = JSON.parse(JSON.stringify(items));
+  adminBuffer = [];
+  resetAdminTimer();
+  renderAll();
+}
+
+function resetAdminTimer() {
+  clearTimeout(adminTimer);
+  adminTimer = setTimeout(showTimeoutModal, 10 * 60 * 1000);
+}
+
+function showTimeoutModal() {
+  let secs = 60;
+  document.getElementById('timeout-secs').textContent = secs;
+  const tmOverlay = document.getElementById('timeout-modal');
+  tmOverlay.style.zIndex = getTopZIndex();
+  tmOverlay.classList.add('show');
+  clearInterval(adminTimeoutInterval);
+  adminTimeoutInterval = setInterval(() => {
+    secs--;
+    document.getElementById('timeout-secs').textContent = secs;
+    if (secs <= 0) {
+      clearInterval(adminTimeoutInterval);
+      document.getElementById('timeout-modal').classList.remove('show');
+      _doExitAdmin(false);
+    }
+  }, 1000);
+}
+
+function timeoutYes() {
+  clearInterval(adminTimeoutInterval);
+  document.getElementById('timeout-modal').classList.remove('show');
+  resetAdminTimer();
+}
+
+function timeoutNo() {
+  clearInterval(adminTimeoutInterval);
+  document.getElementById('timeout-modal').classList.remove('show');
+  _doExitAdmin(false);
+}
+
+async function exitAdmin(save) {
+  if (!save) {
+    showConfirm('All unsaved changes will be lost. Are you sure you want to exit Admin Mode?', 'Exit', 'btn-exit', () => _doExitAdmin(false));
+    return;
+  }
+  await _doExitAdmin(true);
+}
+
+async function _doExitAdmin(save) {
+  clearTimeout(adminTimer);
+  clearInterval(adminTimeoutInterval);
+  document.getElementById('timeout-modal').classList.remove('show');
+
+  if (save && adminDraft !== null) {
+    const merged = [...adminDraft, ...adminBuffer];
+    try {
+      const lr = await acquireLock('admin');
+      if (!lr.ok) { alert('Lock error — cannot save.'); return; }
+      await saveInventory(merged);
+    } catch(e) {
+      alert('Save failed: ' + e.message);
+      return;
+    }
+  }
+
+  await releaseLock();
+  adminMode = false;
+  adminDraft = null;
+  adminBuffer = [];
+  adminCreds = { username: '', password: '' };
+
+  // Reload fresh from server
+  await loadData();
+  renderAll();
+}
+
+// ============================================================
+// MODAL Z-INDEX HELPER
+// ============================================================
+
+function getTopZIndex() {
+  let max = 10000000;
+  document.querySelectorAll('.modal-overlay.show').forEach(el => {
+    const z = parseInt(el.style.zIndex || 0) || 10000000;
+    if (z > max) max = z;
+  });
+  return max + 10;
+}
+
+// ============================================================
+// CONFIRM MODAL
+// ============================================================
+
+let _confirmCallback = null;
+
+function showConfirm(msg, okLabel, okCls, cb, detail) {
+  document.getElementById('confirm-msg').textContent = msg;
+  const detailEl = document.getElementById('confirm-detail');
+  if (detail) {
+    detailEl.textContent = detail;
+    detailEl.style.display = 'block';
+    document.getElementById('confirm-box').style.maxWidth = '580px';
+  } else {
+    detailEl.style.display = 'none';
+    document.getElementById('confirm-box').style.maxWidth = '420px';
+  }
+  const okBtn = document.getElementById('confirm-ok-btn');
+  okBtn.textContent = okLabel || 'Confirm';
+  okBtn.className = 'btn ' + (okCls || 'btn-admin');
+  _confirmCallback = cb;
+  const overlay = document.getElementById('confirm-modal');
+  overlay.style.zIndex = getTopZIndex();
+  overlay.classList.add('show');
+}
+
+function confirmOK() {
+  document.getElementById('confirm-modal').classList.remove('show');
+  if (_confirmCallback) { const cb = _confirmCallback; _confirmCallback = null; cb(); }
+}
+
+function confirmCancel() {
+  document.getElementById('confirm-modal').classList.remove('show');
+  _confirmCallback = null;
+}
+
+// ============================================================
+// EMAIL SETTINGS MODAL
+// ============================================================
+
+function markEmailDirty() {
+  emailDirty = true;
+  const btn = document.getElementById('email-save-btn');
+  if (btn) btn.disabled = false;
+}
+
+function markEmailClean() {
+  emailDirty = false;
+  const btn = document.getElementById('email-save-btn');
+  if (btn) btn.disabled = true;
+}
+
+async function openEmailModal() {
+  document.getElementById('email-test-result').textContent = '';
+  document.getElementById('email-test-result').className = 'email-test-result';
+  document.getElementById('sender-section').style.display = 'none';
+  document.getElementById('smtp-manual').style.display = 'none';
+  document.getElementById('sender-help').style.display = 'none';
+  document.getElementById('sender-email').value = '';
+  document.getElementById('sender-pass').value = '';
+
+  let cfg = {};
+  try {
+    const d = await apiPost('/api/email-config', { username: adminCreds.username, password: adminCreds.password });
+    if (d.ok) cfg = d.config || {};
+  } catch(e) {}
+
+  document.getElementById('email-to').value = cfg.smtp_to || '';
+  emailCCList = (cfg.smtp_cc || '').split(',').map(s => s.trim()).filter(Boolean);
+  // Render pills without triggering dirty
+  const wrap = document.getElementById('cc-pills');
+  wrap.innerHTML = emailCCList.map((addr, i) =>
+    `<span class="cc-pill">${esc(addr)}<span class="cc-pill-x" onclick="removeCCPill(${i})">&#x2715;</span></span>`
+  ).join('');
+
+  // Pre-fill sender email from smtp_from / smtp_user
+  const senderEmail = cfg.smtp_from || cfg.smtp_user || '';
+  document.getElementById('sender-email').value = senderEmail;
+  if (senderEmail) onSenderEmailChange(senderEmail);
+
+  // Pre-fill manual SMTP fields if present
+  document.getElementById('smtp-host-input').value = cfg.smtp_host || '';
+  document.getElementById('smtp-port-input').value = cfg.smtp_port || '587';
+
+  markEmailClean();
+  document.getElementById('email-modal').classList.add('show');
+}
+
+function closeEmailModal() {
+  document.getElementById('email-modal').classList.remove('show');
+}
+
+function exitEmailModal() {
+  if (emailDirty) {
+    showConfirm('You have unsaved changes. Are you sure you want to exit? Changes will be lost.', 'Exit', 'btn-exit', closeEmailModal);
+  } else {
+    closeEmailModal();
+  }
+}
+
+function renderCCPills() {
+  const wrap = document.getElementById('cc-pills');
+  wrap.innerHTML = emailCCList.map((addr, i) =>
+    `<span class="cc-pill">${esc(addr)}<span class="cc-pill-x" onclick="removeCCPill(${i})">&#x2715;</span></span>`
+  ).join('');
+  markEmailDirty();
+}
+
+function addCCPill() {
+  const input = document.getElementById('cc-input');
+  const val = input.value.trim();
+  if (!val) return;
+  if (!emailCCList.includes(val)) {
+    emailCCList.push(val);
+    renderCCPills();
+  }
+  input.value = '';
+}
+
+function removeCCPill(i) {
+  emailCCList.splice(i, 1);
+  renderCCPills();
+}
+
+function toggleSenderSection() {
+  const sec = document.getElementById('sender-section');
+  sec.style.display = sec.style.display === 'none' ? 'block' : 'none';
+}
+
+const GMAIL_HELP = 'Gmail: Go to myaccount.google.com → Security → 2-Step Verification → App passwords → Generate a new app password for "Mail".';
+const OUTLOOK_HELP = 'Outlook/Hotmail: Go to account.microsoft.com → Security → Advanced security options → App passwords → Create a new app password.';
+
+function onSenderEmailChange(email) {
+  const helpEl = document.getElementById('sender-help');
+  const manualEl = document.getElementById('smtp-manual');
+  const domain = email.split('@')[1] || '';
+  if (domain === 'gmail.com') {
+    helpEl.textContent = GMAIL_HELP;
+    helpEl.style.display = 'block';
+    manualEl.style.display = 'none';
+  } else if (domain === 'outlook.com' || domain === 'hotmail.com' || domain === 'live.com') {
+    helpEl.textContent = OUTLOOK_HELP;
+    helpEl.style.display = 'block';
+    manualEl.style.display = 'none';
+  } else if (domain) {
+    helpEl.style.display = 'none';
+    manualEl.style.display = 'block';
+  } else {
+    helpEl.style.display = 'none';
+    manualEl.style.display = 'none';
+  }
+}
+
+function detectSMTPProvider(email) {
+  const domain = (email.split('@')[1] || '').toLowerCase();
+  if (domain === 'gmail.com') return { host: 'smtp.gmail.com', port: '587' };
+  if (domain === 'outlook.com' || domain === 'hotmail.com' || domain === 'live.com') return { host: 'smtp.office365.com', port: '587' };
+  return null;
+}
+
+async function saveEmailSettings() {
+  const senderEmail = document.getElementById('sender-email').value.trim();
+  const senderPass = document.getElementById('sender-pass').value;
+  const senderVisible = document.getElementById('sender-section').style.display !== 'none';
+
+  let smtpHost = '';
+  let smtpPort = '587';
+  if (senderVisible && senderEmail) {
+    const provider = detectSMTPProvider(senderEmail);
+    if (provider) {
+      smtpHost = provider.host;
+      smtpPort = provider.port;
+    } else {
+      smtpHost = document.getElementById('smtp-host-input').value.trim();
+      smtpPort = document.getElementById('smtp-port-input').value.trim() || '587';
+    }
+  }
+
+  const config = {
+    smtp_to: document.getElementById('email-to').value.trim(),
+    smtp_cc: emailCCList.join(','),
+    smtp_from: senderVisible && senderEmail ? senderEmail : undefined,
+    smtp_user: senderVisible && senderEmail ? senderEmail : undefined,
+    smtp_pass: senderVisible ? senderPass : '',
+    smtp_host: senderVisible ? smtpHost : undefined,
+    smtp_port: senderVisible ? smtpPort : undefined,
+  };
+
+  // Remove undefined keys so server keeps existing values where not provided
+  // Build a clean config object: fetch existing first, merge
+  let existing = {};
+  try {
+    const d = await apiPost('/api/email-config', { username: adminCreds.username, password: adminCreds.password });
+    if (d.ok) existing = d.config || {};
+  } catch(e) {}
+
+  const merged = {
+    smtp_host: senderVisible && senderEmail ? smtpHost : (existing.smtp_host || ''),
+    smtp_port: senderVisible && senderEmail ? smtpPort : (existing.smtp_port || '587'),
+    smtp_user: senderVisible && senderEmail ? senderEmail : (existing.smtp_user || ''),
+    smtp_pass: senderVisible && senderPass ? senderPass : (existing.smtp_pass || ''),
+    smtp_from: senderVisible && senderEmail ? senderEmail : (existing.smtp_from || ''),
+    smtp_to: config.smtp_to,
+    smtp_cc: config.smtp_cc,
+  };
+
+  try {
+    const d = await apiPut('/api/email-config', { username: adminCreds.username, password: adminCreds.password, token: editorToken, config: merged });
+    if (!d.ok) { alert('Save failed: ' + (d.error || 'unknown error')); return; }
+    markEmailClean();
+    const resEl = document.getElementById('email-test-result');
+    resEl.textContent = '✓ Settings saved.';
+    resEl.className = 'email-test-result ok';
+  } catch(e) {
+    alert('Save failed: ' + e.message);
+  }
+}
+
+async function sendTestEmail() {
+  const resEl = document.getElementById('email-test-result');
+  if (emailDirty) {
+    resEl.textContent = 'Please save your changes before sending a test email.';
+    resEl.className = 'email-test-result warn';
+    return;
+  }
+  resEl.textContent = 'Sending…';
+  resEl.className = 'email-test-result';
+  try {
+    const d = await apiPost('/api/email-test', { username: adminCreds.username, password: adminCreds.password });
+    if (d.ok) {
+      resEl.textContent = '✓ Test email sent successfully.';
+      resEl.className = 'email-test-result ok';
+    } else {
+      resEl.textContent = '✗ ' + (d.error || 'Send failed.');
+      resEl.className = 'email-test-result err';
+    }
+  } catch(e) {
+    resEl.textContent = '✗ ' + e.message;
+    resEl.className = 'email-test-result err';
+  }
+}
+
+// ============================================================
+// BUFFER
+// ============================================================
+
+function getBuffer() { return adminMode ? adminBuffer : normalBuffer; }
+
+function getBaseNextId() {
+  const src = adminMode ? adminDraft : items;
+  let max = 0;
+  for (const it of src) {
+    const m = it.id.match(/^PV-(\d+)$/);
+    if (m) { const n = parseInt(m[1]); if (n > max) max = n; }
+  }
+  return max + 1;
+}
+
+function formatId(n) { return 'PV-' + String(n).padStart(3, '0'); }
+
+function resequenceBuffer() {
+  const buf = getBuffer();
+  const base = getBaseNextId();
+  buf.forEach((b, i) => { b.id = formatId(base + i); });
+}
+
+function addBufferEntry() {
+  const buf = getBuffer();
+  const base = getBaseNextId() + buf.length;
+  buf.push({ id: formatId(base), name:'', sn:'', type: options.types[0]||'', status: options.statuses[0]?.value||'', sentDate:'', returnDate:'', note:'' });
+  renderBuffer();
+}
+
+function removeBufferEntry(idx) {
+  const buf = getBuffer();
+  buf.splice(idx, 1);
+  resequenceBuffer();
+  renderBuffer();
+}
+
+function bufferUpdateField(idx, field, value) {
+  const buf = getBuffer();
+  if (buf[idx]) buf[idx][field] = value;
+}
+
+async function saveBuffer() {
+  const buf = getBuffer();
+  if (buf.length === 0) return;
+
+  if (adminMode) {
+    // In admin mode, buffer items just stay — they'll be merged on SAVE AND EXIT
+    // But we can clear the buffer panel and move them to adminDraft
+    adminDraft.push(...buf.map(b => ({...b})));
+    adminBuffer = [];
+    resequenceBuffer();
+    renderAll();
+    return;
+  }
+
+  // Normal mode: acquire lock, append to items, save, release
+  resequenceBuffer();
+  const toAdd = [...buf];
+  try {
+    const lr = await acquireLock('normal');
+    if (!lr.ok) { alert('Could not acquire lock: editor is busy'); return; }
+    // Refresh items first
+    const invRes = await fetch('/api/inventory');
+    const inv = await invRes.json();
+    if (inv.lock && inv.lock.active && inv.lock.mode === 'admin') {
+      await releaseLock();
+      alert('Admin is currently editing. Please wait.');
+      items = inv.items || [];
+      renderAll();
+      return;
+    }
+    items = inv.items || [];
+    const merged = [...items, ...toAdd];
+    await saveInventory(merged);
+    await releaseLock();
+    items = merged;
+    normalBuffer = [];
+    renderAll();
+  } catch(e) {
+    await releaseLock();
+    alert('Save failed: ' + e.message);
+  }
+}
+
+function clearBuffer() {
+  if (adminMode) { adminBuffer = []; } else { normalBuffer = []; }
+  renderBuffer();
+}
+
+// ============================================================
+// NOTE HANDLING
+// ============================================================
+
+const TICK_SVG = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>`;
+
+function startNoteEdit(realIdx) {
+  const cell = document.querySelector(`[data-note-idx="${realIdx}"]`);
+  if (!cell) return;
+  if (adminMode) {
+    // Admin mode: note input is always editable inline, just focus it
+    const inp = cell.querySelector('input');
+    if (inp) { inp.focus(); inp.select(); }
+    return;
+  }
+  // Normal mode: switch to edit state
+  const item = items[realIdx];
+  cell.innerHTML = `<div class="note-editor">
+    <input type="text" id="note-inp-${realIdx}" value="${esc(item.note)}" placeholder="Add a note…">
+    <button class="note-tick-btn" onclick="saveNoteEdit(${realIdx})" title="Save">${TICK_SVG}</button>
+  </div>`;
+  const inp = document.getElementById(`note-inp-${realIdx}`);
+  inp.focus();
+  inp.select();
+
+  // mousedown on tick fires BEFORE blur, so it lets the click complete instead of cancelling
+  let _skipBlurCancel = false;
+  const tickBtn = cell.querySelector('.note-tick-btn');
+  if (tickBtn) tickBtn.addEventListener('mousedown', () => { _skipBlurCancel = true; });
+
+  inp.addEventListener('keydown', e => {
+    if (e.key === 'Enter') saveNoteEdit(realIdx);
+    if (e.key === 'Escape') { _skipBlurCancel = true; cancelNoteEdit(realIdx); }
+  });
+  inp.addEventListener('blur', () => {
+    if (!_skipBlurCancel) cancelNoteEdit(realIdx);
+    _skipBlurCancel = false;
+  });
+}
+
+function cancelNoteEdit(realIdx) {
+  const src = adminMode ? adminDraft : items;
+  const item = src[realIdx];
+  const cell = document.querySelector(`[data-note-idx="${realIdx}"]`);
+  if (!cell) return;
+  cell.innerHTML = buildNoteCellContent(item, realIdx);
+}
+
+async function saveNoteEdit(realIdx) {
+  const inp = document.getElementById(`note-inp-${realIdx}`);
+  if (!inp) return;
+  const newNote = inp.value;
+
+  if (adminMode) {
+    adminDraft[realIdx].note = newNote;
+    resetAdminTimer();
+    cancelNoteEdit(realIdx);
+    return;
+  }
+
+  const prev = items[realIdx].note;
+  items[realIdx].note = newNote;
+  try {
+    const lr = await acquireLock('normal');
+    if (!lr.ok) { items[realIdx].note = prev; alert('Could not acquire lock'); renderAll(); return; }
+    await saveInventory(items);
+    await releaseLock();
+    cancelNoteEdit(realIdx);
+  } catch(e) {
+    items[realIdx].note = prev;
+    alert('Save failed: ' + e.message);
+    renderAll();
+  }
+}
+
+async function deleteNote(realIdx) {
+  if (adminMode) {
+    adminDraft[realIdx].note = '';
+    resetAdminTimer();
+    renderAll();
+    return;
+  }
+  showConfirm('Delete this note?', 'Delete', 'btn-exit', async () => {
+    const prev = items[realIdx].note;
+    items[realIdx].note = '';
+    try {
+      const lr = await acquireLock('normal');
+      if (!lr.ok) { items[realIdx].note = prev; alert('Could not acquire lock'); renderAll(); return; }
+      await saveInventory(items);
+      await releaseLock();
+    } catch(e) {
+      items[realIdx].note = prev;
+      alert('Save failed: ' + e.message);
+    }
+    renderAll();
+  });
+}
+
+// ============================================================
+// ADMIN TABLE EDIT HELPERS
+// ============================================================
+
+function updateDraft(realIdx, field, value) {
+  if (adminDraft && adminDraft[realIdx]) {
+    adminDraft[realIdx][field] = value;
+    resetAdminTimer();
+  }
+}
+
+function deleteRow(realIdx) {
+  if (!adminMode || !adminDraft) return;
+  const item = adminDraft[realIdx];
+  const detail = item ? `${item.id}${item.name ? ' \u2014 ' + item.name : ''}` : null;
+  showConfirm('Are you sure you want to delete this entry?', 'Delete', 'btn-exit', () => {
+    adminDraft.splice(realIdx, 1);
+    resetAdminTimer();
+    renderAll();
+  }, detail);
+}
+
+// ============================================================
+// RENDER BUFFER
+// ============================================================
+
+function buildDateDisplay(val) {
+  if (!val) return `<div class="date-display-box empty">—</div>`;
+  return `<div class="date-display-box">${fmtDate(val)}</div>`;
+}
+
+function renderBuffer() {
+  resequenceBuffer();
+  const buf = getBuffer();
+  const wrap = document.getElementById('buffer-wrap');
+  const list = document.getElementById('buffer-list');
+  const sub  = document.getElementById('buffer-sub');
+
+  if (buf.length === 0) { wrap.classList.remove('has-items'); return; }
+  wrap.classList.add('has-items');
+  sub.textContent = adminMode
+    ? 'Will be merged on Save and Exit'
+    : 'Will be added to the log on Save';
+
+  list.innerHTML = buf.map((b, i) => `
+    <div class="buffer-row">
+      <button class="buffer-x-btn" onclick="removeBufferEntry(${i})">×</button>
+      <div class="buffer-id-text">${esc(b.id)}</div>
+      <div class="buffer-cell"><input type="text" value="${esc(b.name)}" placeholder="Item name" oninput="bufferUpdateField(${i},'name',this.value)"></div>
+      <div class="buffer-cell"><input type="text" value="${esc(b.sn)}" placeholder="SN/PN" oninput="bufferUpdateField(${i},'sn',this.value)"></div>
+      <div class="buffer-cell">${buildTypeDropdown(b.type, i, 'buf-type')}</div>
+      <div class="buffer-cell">${buildStatusDropdown(b.status, i, 'buf-status')}</div>
+      <div class="buffer-cell">${buildDateDisplay(b.sentDate)}</div>
+      <div class="buffer-cell">${buildDateDisplay(b.returnDate)}</div>
+      <div class="buffer-cell"><input type="text" value="${esc(b.note)}" placeholder="Note" oninput="bufferUpdateField(${i},'note',this.value)"></div>
+    </div>`).join('');
+
+  reattachDropdowns(list);
+}
+
+// ============================================================
+// RENDER TABLE
+// ============================================================
+
+function filterItems(src) {
+  if (!searchQuery) return src;
+  const q = searchQuery.toLowerCase();
+  return src.filter(it => {
+    for (const col of searchCols) {
+      let v = '';
+      if (col === 'id') v = it.id;
+      else if (col === 'name') v = it.name;
+      else if (col === 'sn') v = it.sn;
+      else if (col === 'type') v = it.type;
+      else if (col === 'status') v = it.status;
+      else if (col === 'note') v = it.note;
+      if (v && v.toLowerCase().includes(q)) return true;
+    }
+    return false;
+  });
+}
+
+const PENCIL_SVG = `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 3a2.85 2.85 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/><path d="m15 5 4 4"/></svg>`;
+
+function buildNoteCellContent(item, realIdx) {
+  if (adminMode) {
+    return `<input type="text" value="${esc(item.note)}" placeholder="Note" oninput="updateDraft(${realIdx},'note',this.value)">`;
+  }
+  const hasNote = !!item.note;
+  if (hasNote) {
+    // Has content: input is NOT clickable; only pencil button starts editing
+    return `<div class="note-normal-wrap has-note">
+      <input type="text" class="note-normal-input" readonly value="${esc(item.note)}" placeholder="Note">
+      <button class="note-icon-btn note-icon-edit" onclick="startNoteEdit(${realIdx})" title="Edit">${PENCIL_SVG}</button>
+      <button class="note-icon-btn note-icon-del" onclick="deleteNote(${realIdx})" title="Delete">&#xd7;</button>
+    </div>`;
+  }
+  // Empty: clicking the input activates editing
+  return `<div class="note-normal-wrap">
+    <input type="text" class="note-normal-input" readonly value="" placeholder="Note"
+      onclick="startNoteEdit(${realIdx})"
+      onkeydown="if(event.key==='Enter')saveNoteEdit(${realIdx});if(event.key==='Escape')cancelNoteEdit(${realIdx});">
+  </div>`;
+}
+
+function buildTableRow(item, realIdx) {
+  const isAdmin = adminMode;
+
+  const idCell = `<span class="locked">${esc(item.id)}</span>`;
+  const nameCell = isAdmin
+    ? `<input type="text" value="${esc(item.name)}" oninput="updateDraft(${realIdx},'name',this.value)">`
+    : `<span class="locked">${esc(item.name) || '—'}</span>`;
+  const snCell = isAdmin
+    ? `<input type="text" value="${esc(item.sn)}" oninput="updateDraft(${realIdx},'sn',this.value)">`
+    : `<span class="locked">${esc(item.sn) || '—'}</span>`;
+
+  const typeCell = isAdmin
+    ? buildTypeDropdown(item.type, realIdx, 'tbl-type')
+    : `<span class="locked">${esc(item.type)}</span>`;
+
+  const statusCtx = isAdmin ? 'tbl-status-admin' : 'tbl-status-normal';
+  const statusCell = buildStatusDropdown(item.status, realIdx, statusCtx);
+
+  const hasDateStatus = needsDates(item.status);
+  let sentCell, retCell;
+  if (isAdmin) {
+    if (hasDateStatus) {
+      const sentHtml = item.sentDate
+        ? `<div class="date-display-box" style="cursor:pointer" onclick="openDateEditModal(${realIdx})">${fmtDate(item.sentDate)}</div>`
+        : `<div class="date-display-box empty" style="cursor:pointer" onclick="openDateEditModal(${realIdx})">—</div>`;
+      const retHtml = item.returnDate
+        ? `<div class="date-display-box" style="cursor:pointer" onclick="openDateEditModal(${realIdx})">${fmtDate(item.returnDate)}</div>`
+        : `<div class="date-display-box empty" style="cursor:pointer" onclick="openDateEditModal(${realIdx})">—</div>`;
+      sentCell = sentHtml;
+      retCell  = retHtml;
+    } else {
+      sentCell = `<span class="date-inline-text">—</span>`;
+      retCell  = `<span class="date-inline-text">—</span>`;
+    }
+  } else {
+    sentCell = `<span class="date-inline-text">${item.sentDate   ? fmtDate(item.sentDate)   : '—'}</span>`;
+    retCell  = `<span class="date-inline-text">${item.returnDate ? fmtDate(item.returnDate) : '—'}</span>`;
+  }
+
+  const noteCell = buildNoteCellContent(item, realIdx);
+
+  return `<tr>
+    <td class="col-delete"><button class="row-x-btn" onclick="deleteRow(${realIdx})">×</button></td>
+    <td class="col-id">${idCell}</td>
+    <td class="col-name">${nameCell}</td>
+    <td class="col-sn">${snCell}</td>
+    <td class="col-type">${typeCell}</td>
+    <td class="col-status no-select">${statusCell}</td>
+    <td class="col-sent-date">${sentCell}</td>
+    <td class="col-return-date">${retCell}</td>
+    <td class="col-note" data-note-idx="${realIdx}">${noteCell}</td>
+  </tr>`;
+}
+
+function renderTable() {
+  const src = adminMode ? adminDraft : items;
+  const filtered = filterItems(src);
+  const total = src.length;
+  const fCount = filtered.length;
+
+  let pageItems, startIdx, endIdx;
+  if (pageSize === 'all') {
+    pageItems = filtered;
+    startIdx = 1;
+    endIdx = fCount;
+  } else {
+    const maxPage = Math.max(1, Math.ceil(fCount / pageSize));
+    if (currentPage > maxPage) currentPage = maxPage;
+    startIdx = (currentPage - 1) * pageSize + 1;
+    endIdx = Math.min(currentPage * pageSize, fCount);
+    pageItems = filtered.slice(startIdx - 1, endIdx);
+  }
+
+  const tbody = document.getElementById('inv-tbody');
+  tbody.innerHTML = pageItems.map(item => {
+    const realIdx = src.indexOf(item);
+    return buildTableRow(item, realIdx);
+  }).join('');
+
+  reattachDropdowns(tbody);
+  renderPagination(total, fCount, startIdx, endIdx);
+  renderEntriesControls();
+
+  const container = document.getElementById('container');
+  if (adminMode) { container.classList.add('edit-mode'); }
+  else { container.classList.remove('edit-mode'); }
+
+  document.getElementById('btn-edit-mode').style.display = adminMode ? 'none' : '';
+}
+
+function renderAll() {
+  closeAllDropdowns();
+  renderBuffer();
+  renderTable();
+}
+
+// ============================================================
+// PAGINATION
+// ============================================================
+
+function renderEntriesControls() {
+  const ec = document.getElementById('entries-controls');
+  const sizes = [10, 20, 50, 100, 'all'];
+  ec.innerHTML = sizes.map(s => {
+    const active = pageSize === s ? ' active' : '';
+    const label = s === 'all' ? 'All' : s;
+    return `<button class="entries-btn${active}" onclick="setPageSize(${s === 'all' ? "'all'" : s})">${label}</button>`;
+  }).join('');
+}
+
+function setPageSize(s) {
+  pageSize = s;
+  currentPage = 1;
+  localStorage.setItem('pageSize', s === 'all' ? 'all' : String(s));
+  renderTable();
+}
+
+function renderPagination(total, filtered, startIdx, endIdx) {
+  const info = document.getElementById('pagination-info');
+  if (filtered === 0) {
+    info.textContent = 'No entries';
+  } else if (pageSize === 'all') {
+    info.textContent = `Showing all ${filtered}${searchQuery ? ' (filtered)' : ''} of ${total}`;
+  } else {
+    info.textContent = `Showing ${startIdx}–${endIdx} of ${filtered}${searchQuery ? ' (filtered)' : ''}`;
+  }
+
+  const pn = document.getElementById('page-numbers');
+  if (pageSize === 'all' || filtered === 0) { pn.innerHTML = ''; return; }
+
+  const totalPages = Math.max(1, Math.ceil(filtered / pageSize));
+
+  const btn = (label, page, disabled, active) => {
+    const cls = ['page-btn', active ? 'active' : '', disabled ? '' : ''].filter(Boolean).join(' ');
+    return `<button class="${cls}" ${disabled ? 'disabled' : ''} onclick="goToPage(${page})">${label}</button>`;
+  };
+
+  let html = '';
+  html += btn('«', 1, currentPage === 1, false);
+  html += btn('‹', currentPage - 1, currentPage === 1, false);
+
+  const pages = smartPages(currentPage, totalPages);
+  let prev = null;
+  for (const p of pages) {
+    if (prev !== null && p - prev > 1) html += `<span class="page-ellipsis">…</span>`;
+    html += btn(p, p, false, p === currentPage);
+    prev = p;
+  }
+
+  html += btn('›', currentPage + 1, currentPage === totalPages, false);
+  html += btn('»', totalPages, currentPage === totalPages, false);
+  pn.innerHTML = html;
+}
+
+function smartPages(cur, total) {
+  if (total <= 7) return Array.from({length: total}, (_, i) => i + 1);
+  const s = new Set([1, total, cur]);
+  if (cur > 1) s.add(cur - 1);
+  if (cur < total) s.add(cur + 1);
+  return Array.from(s).sort((a, b) => a - b);
+}
+
+function goToPage(p) {
+  currentPage = p;
+  renderTable();
+}
+
+// ============================================================
+// SEARCH & FILTER
+// ============================================================
+
+const FILTER_COLS = [
+  { key: 'id', label: 'ID' },
+  { key: 'name', label: 'Item Name' },
+  { key: 'sn', label: 'SN/PN' },
+  { key: 'type', label: 'Type' },
+  { key: 'status', label: 'Status' },
+  { key: 'note', label: 'Note' },
+];
+
+function buildFilterMenu() {
+  const menu = document.getElementById('filter-menu');
+  menu.innerHTML = FILTER_COLS.map(c => `
+    <label class="filter-option">
+      <input type="checkbox" ${searchCols.has(c.key) ? 'checked' : ''} onchange="toggleFilterCol('${c.key}', this.checked)">
+      <span>${c.label}</span>
+    </label>`).join('');
+}
+
+function toggleFilterMenu() {
+  const dd = document.getElementById('filter-dd');
+  const btn = document.getElementById('filter-btn');
+  const isOpen = dd.classList.contains('open');
+  dd.classList.toggle('open', !isOpen);
+  btn.classList.toggle('active', !isOpen);
+}
+
+function toggleFilterCol(key, checked) {
+  if (checked) searchCols.add(key); else searchCols.delete(key);
+  updateSearchPlaceholder();
+  if (searchQuery) { currentPage = 1; renderTable(); }
+}
+
+function updateSearchPlaceholder() {
+  const active = FILTER_COLS.filter(c => searchCols.has(c.key)).map(c => c.label);
+  const inp = document.getElementById('search-input');
+  inp.placeholder = active.length === FILTER_COLS.length ? 'Filter by ID, ITEM NAME, SN/PN, TYPE, STATUS, NOTE…' : `Filter by ${active.join(', ')}…`;
+}
+
+function onSearch(q) {
+  searchQuery = q;
+  currentPage = 1;
+  renderTable();
+}
+
+// Close filter menu on outside click
+document.addEventListener('click', e => {
+  const dd = document.getElementById('filter-dd');
+  if (!dd.contains(e.target)) dd.classList.remove('open');
+});
+
+// ============================================================
+// OPTIONS MANAGER
+// ============================================================
+
+const STATUS_COLORS = [
+  { cls: 'status-feas',     hex: '#93c47d' },
+  { cls: 'status-devel',    hex: '#8faadc' },
+  { cls: 'status-sales',    hex: '#CC99FF' },
+  { cls: 'status-customer', hex: '#ffd966' },
+  { cls: 'status-loaned',   hex: '#e06666' },
+];
+
+const STATUS_PRESET_CLS = new Set(STATUS_COLORS.map(c => c.cls));
+
+function openOptionsManager(field) {
+  optionsField = field;
+  optionsEditCopy = JSON.parse(JSON.stringify(options));
+  optionsPendingColors = {};
+  typeRenameMap = new Map();
+  statusRenameMap = new Map();
+  document.getElementById('options-modal-title').textContent =
+    field === 'type' ? 'Manage Type Options' : 'Manage Status Options';
+  document.getElementById('options-new-input').value = '';
+  renderOptionsList();
+  document.getElementById('options-modal').classList.add('show');
+  document.body.style.overflow = 'hidden';
+}
+
+function closeOptionsModal() {
+  document.getElementById('options-modal').classList.remove('show');
+  document.body.style.overflow = '';
+  optionsField = null;
+  optionsEditCopy = null;
+  optionsPendingColors = {};
+}
+
+function isOptionInUse(field, value) {
+  const src = adminMode ? adminDraft : items;
+  const buf = adminMode ? adminBuffer : normalBuffer;
+  return [...src, ...buf].some(it => field === 'type' ? it.type === value : it.status === value);
+}
+
+function renderOptionsList() {
+  const list = document.getElementById('options-list');
+  if (optionsField === 'type') {
+    list.innerHTML = optionsEditCopy.types.map((t, i) => {
+      const inUse = isOptionInUse('type', t);
+      return `<div class="options-item">
+        <span class="options-item-label" contenteditable="true" data-idx="${i}" onblur="optionLabelEdit(${i}, this.innerText)" onkeydown="if(event.key==='Enter'){event.preventDefault();this.blur()}">${esc(t)}</span>
+        <button class="options-item-delete" ${inUse ? 'disabled title="In use"' : ''} onclick="deleteOption(${i})">×</button>
+      </div>`;
+    }).join('');
+  } else {
+    list.innerHTML = optionsEditCopy.statuses.map((s, i) => {
+      const inUse = isOptionInUse('status', s.value);
+      const isCustom = !STATUS_PRESET_CLS.has(s.cls);
+      const customHex = isCustom ? ('#' + (s.cls.match(/status-custom-([0-9a-fA-F]{6})/i)||['',''])[1]) : '';
+      const colorChips = STATUS_COLORS.map(c =>
+        `<div class="color-chip ${c.cls} ${s.cls === c.cls ? 'selected' : ''}" title="${c.hex}" onclick="selectStatusColor(${i},'${c.cls}')"></div>`
+      ).join('') +
+        `<div class="color-chip-add ${isCustom ? 'selected' : ''}" title="${isCustom ? customHex : 'Custom color'}" style="${isCustom ? 'background:'+customHex+';color:#fff;border-style:solid' : ''}" onclick="openColorPicker(${i},this)">+</div>`;
+      return `<div class="options-item" style="flex-direction:column;align-items:stretch;gap:6px">
+        <div style="display:flex;align-items:center;gap:8px">
+          <span class="options-item-label" contenteditable="true" data-idx="${i}" onblur="optionLabelEdit(${i}, this.innerText)" onkeydown="if(event.key==='Enter'){event.preventDefault();this.blur()}">${esc(s.label)}</span>
+          <button class="options-item-delete" ${inUse ? 'disabled title="In use"' : ''} onclick="deleteOption(${i})">×</button>
+        </div>
+        <div class="options-colors-row">${colorChips}</div>
+      </div>`;
+    }).join('');
+  }
+}
+
+function optionLabelEdit(idx, newLabel) {
+  newLabel = newLabel.trim();
+  if (!newLabel) { renderOptionsList(); return; }
+  if (optionsField === 'type') {
+    const currentVal = optionsEditCopy.types[idx];
+    if (currentVal !== newLabel) {
+      // Find the original (at modal-open time) that chains to currentVal
+      let origKey = currentVal;
+      for (const [orig, cur] of typeRenameMap.entries()) {
+        if (cur === currentVal) { origKey = orig; break; }
+      }
+      if (origKey !== newLabel) {
+        typeRenameMap.set(origKey, newLabel);
+      } else {
+        typeRenameMap.delete(origKey); // renamed back to original — no-op
+      }
+      optionsEditCopy.types[idx] = newLabel;
+      sortTypes(optionsEditCopy.types);
+      renderOptionsList();
+    }
+  } else {
+    optionsEditCopy.statuses[idx].label = newLabel;
+    // Status value is unchanged; statusRenameMap stays empty (no inventory cascade needed)
+  }
+}
+
+function selectStatusColor(idx, cls) {
+  if (optionsField !== 'status') return;
+  optionsEditCopy.statuses[idx].cls = cls;
+  renderOptionsList();
+}
+
+// ============================================================
+// CUSTOM COLOR PICKER
+// ============================================================
+let _cpIdx = null;
+let _cpHue = 0;
+let _cpSat = 1;
+let _cpVal = 1;
+let _cpDraggingSV = false;
+let _cpDraggingHue = false;
+
+function _hsv2hex(h, s, v) {
+  const f = n => {
+    const k = (n + h / 60) % 6;
+    return Math.round((v - v * s * Math.max(0, Math.min(k, 4 - k, 1))) * 255);
+  };
+  return '#' + [f(5), f(3), f(1)].map(x => x.toString(16).padStart(2, '0')).join('');
+}
+
+function _hex2hsv(hex) {
+  hex = hex.replace('#', '');
+  if (hex.length === 3) hex = hex.split('').map(c => c + c).join('');
+  const r = parseInt(hex.slice(0,2),16)/255;
+  const g = parseInt(hex.slice(2,4),16)/255;
+  const b = parseInt(hex.slice(4,6),16)/255;
+  const max = Math.max(r,g,b), min = Math.min(r,g,b), d = max - min;
+  let h = 0;
+  if (d) {
+    if (max === r) h = ((g - b) / d + 6) % 6;
+    else if (max === g) h = (b - r) / d + 2;
+    else h = (r - g) / d + 4;
+    h *= 60;
+  }
+  return { h, s: max ? d / max : 0, v: max };
+}
+
+function _cpDrawSV() {
+  const cv = document.getElementById('cp-canvas-sv');
+  if (!cv) return;
+  const ctx = cv.getContext('2d');
+  const W = cv.width, H = cv.height;
+  ctx.fillStyle = _hsv2hex(_cpHue, 1, 1);
+  ctx.fillRect(0, 0, W, H);
+  const wg = ctx.createLinearGradient(0,0,W,0);
+  wg.addColorStop(0, 'rgba(255,255,255,1)');
+  wg.addColorStop(1, 'rgba(255,255,255,0)');
+  ctx.fillStyle = wg; ctx.fillRect(0,0,W,H);
+  const bg = ctx.createLinearGradient(0,0,0,H);
+  bg.addColorStop(0,'rgba(0,0,0,0)'); bg.addColorStop(1,'rgba(0,0,0,1)');
+  ctx.fillStyle = bg; ctx.fillRect(0,0,W,H);
+  const cx = _cpSat * W, cy = (1 - _cpVal) * H;
+  ctx.beginPath(); ctx.arc(cx,cy,6,0,2*Math.PI);
+  ctx.strokeStyle = '#fff'; ctx.lineWidth = 2; ctx.stroke();
+  ctx.beginPath(); ctx.arc(cx,cy,7,0,2*Math.PI);
+  ctx.strokeStyle = 'rgba(0,0,0,0.4)'; ctx.lineWidth = 1; ctx.stroke();
+}
+
+function _cpDrawHue() {
+  const cv = document.getElementById('cp-canvas-hue');
+  if (!cv) return;
+  const ctx = cv.getContext('2d');
+  const W = cv.width, H = cv.height;
+  const grad = ctx.createLinearGradient(0,0,W,0);
+  for (let i = 0; i <= 6; i++) grad.addColorStop(i/6, `hsl(${i*60},100%,50%)`);
+  ctx.fillStyle = grad; ctx.fillRect(0,0,W,H);
+  const cx = (_cpHue / 360) * W;
+  ctx.fillStyle = '#fff'; ctx.fillRect(cx-2,0,4,H);
+  ctx.strokeStyle = 'rgba(0,0,0,0.4)'; ctx.lineWidth = 1; ctx.strokeRect(cx-2,0,4,H);
+}
+
+function _cpUpdate() {
+  _cpDrawSV(); _cpDrawHue();
+  const hex = _hsv2hex(_cpHue, _cpSat, _cpVal);
+  document.getElementById('cp-preview').style.background = hex;
+  const inp = document.getElementById('cp-hex-input');
+  if (document.activeElement !== inp) inp.value = hex;
+}
+
+function openColorPicker(idx, triggerEl) {
+  if (optionsField !== 'status') return;
+  _cpIdx = idx;
+  const s = optionsEditCopy.statuses[idx];
+  if (!STATUS_PRESET_CLS.has(s.cls)) {
+    const m = s.cls.match(/status-custom-([0-9a-fA-F]{6})/i);
+    if (m) { const hsv = _hex2hsv('#'+m[1]); _cpHue=hsv.h; _cpSat=hsv.s; _cpVal=hsv.v; }
+    else { _cpHue=0; _cpSat=1; _cpVal=1; }
+  } else { _cpHue=0; _cpSat=1; _cpVal=1; }
+  const pop = document.getElementById('color-picker-popover');
+  pop.style.display = 'block';
+  _cpUpdate();
+  const rect = triggerEl.getBoundingClientRect();
+  const popW = 220, popH = pop.offsetHeight || 240;
+  let top = rect.bottom + 6, left = rect.left;
+  if (left + popW > window.innerWidth - 8) left = window.innerWidth - popW - 8;
+  if (top + popH > window.innerHeight - 8) top = rect.top - popH - 6;
+  pop.style.top = top + 'px'; pop.style.left = left + 'px';
+}
+
+function closeColorPicker() {
+  document.getElementById('color-picker-popover').style.display = 'none';
+  _cpIdx = null;
+}
+
+function applyColorPicker() {
+  if (_cpIdx === null) return;
+  const hex = _hsv2hex(_cpHue, _cpSat, _cpVal);
+  const cls = 'status-custom-' + hex.slice(1);
+  const styleId = 'style-' + cls;
+  if (!document.getElementById(styleId)) {
+    const st = document.createElement('style');
+    st.id = styleId; st.textContent = `.${cls}{background:${hex}!important;}`;
+    document.head.appendChild(st);
+  }
+  optionsEditCopy.statuses[_cpIdx].cls = cls;
+  optionsPendingColors[_cpIdx] = cls;
+  closeColorPicker();
+  renderOptionsList();
+}
+
+function cpHexInput(val) {
+  if (/^#[0-9a-fA-F]{6}$/.test(val)) {
+    const hsv = _hex2hsv(val);
+    _cpHue = hsv.h; _cpSat = hsv.s; _cpVal = hsv.v;
+    _cpDrawSV(); _cpDrawHue();
+    document.getElementById('cp-preview').style.background = val;
+  }
+}
+
+function cpSVMousedown(e) { _cpDraggingSV = true; _cpSVMove(e); }
+function _cpSVMove(e) {
+  const cv = document.getElementById('cp-canvas-sv');
+  const rect = cv.getBoundingClientRect();
+  _cpSat = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
+  _cpVal = Math.max(0, Math.min(1, 1 - (e.clientY - rect.top) / rect.height));
+  _cpUpdate();
+}
+
+function cpHueMousedown(e) { _cpDraggingHue = true; _cpHueMove(e); }
+function _cpHueMove(e) {
+  const cv = document.getElementById('cp-canvas-hue');
+  const rect = cv.getBoundingClientRect();
+  _cpHue = Math.max(0, Math.min(360, ((e.clientX - rect.left) / rect.width) * 360));
+  _cpUpdate();
+}
+
+document.addEventListener('mouseup', () => { _cpDraggingSV = false; _cpDraggingHue = false; });
+document.addEventListener('mousemove', e => {
+  if (_cpDraggingSV) _cpSVMove(e);
+  if (_cpDraggingHue) _cpHueMove(e);
+});
+document.addEventListener('mousedown', e => {
+  const pop = document.getElementById('color-picker-popover');
+  if (pop && pop.style.display !== 'none' && !pop.contains(e.target) && !e.target.classList.contains('color-chip-add')) {
+    closeColorPicker();
+  }
+});
+
+function deleteOption(idx) {
+  if (optionsField === 'type') {
+    optionsEditCopy.types.splice(idx, 1);
+  } else {
+    optionsEditCopy.statuses.splice(idx, 1);
+  }
+  renderOptionsList();
+}
+
+function addOption() {
+  const inp = document.getElementById('options-new-input');
+  const val = inp.value.trim();
+  if (!val) return;
+  if (optionsField === 'type') {
+    optionsEditCopy.types.push(val);
+    sortTypes(optionsEditCopy.types);
+  } else {
+    optionsEditCopy.statuses.push({ value: val, label: val, cls: STATUS_COLORS[0].cls });
+  }
+  inp.value = '';
+  renderOptionsList();
+}
+
+async function saveOptionsModal() {
+  // Build rename maps — exclude identity entries
+  const typeRenames = {};
+  for (const [orig, cur] of typeRenameMap.entries()) {
+    if (orig !== cur) typeRenames[orig] = cur;
+  }
+  const statusRenames = {};
+  for (const [orig, cur] of statusRenameMap.entries()) {
+    if (orig !== cur) statusRenames[orig] = cur;
+  }
+
+  const newOpts = {
+    types: optionsEditCopy.types,
+    statuses: optionsEditCopy.statuses,
+  };
+
+  let needRelease = false;
+  if (!adminMode) {
+    const lr = await acquireLock('normal');
+    if (!lr.ok) { alert('Could not acquire lock to save options'); return; }
+    needRelease = true;
+  }
+
+  try {
+    const d = await apiPut('/api/options', { token: editorToken, ...newOpts, typeRenames, statusRenames });
+    if (!d.ok) throw new Error(d.error);
+    options = newOpts;
+    sortTypes(options.types);
+    // Apply renames to local in-memory items and drafts so UI is consistent
+    if (Object.keys(typeRenames).length > 0 || Object.keys(statusRenames).length > 0) {
+      const applyRenames = arr => arr.forEach(it => {
+        if (typeRenames[it.type]) it.type = typeRenames[it.type];
+        if (statusRenames[it.status]) it.status = statusRenames[it.status];
+      });
+      applyRenames(items);
+      if (adminDraft) applyRenames(adminDraft);
+      applyRenames(normalBuffer);
+      applyRenames(adminBuffer);
+    }
+  } catch(e) {
+    alert('Failed to save options: ' + e.message);
+    if (needRelease) await releaseLock();
+    return;
+  }
+
+  if (needRelease) await releaseLock();
+  closeOptionsModal();
+  renderAll();
+}
+
+// ============================================================
+// KEYBOARD SHORTCUTS
+// ============================================================
+
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape') {
+    closeAllDropdowns();
+    const fd = document.getElementById('filter-dd');
+    if (fd) fd.classList.remove('open');
+  }
+});
+
+// Login modal Enter key
+document.getElementById('login-pass').addEventListener('keydown', e => {
+  if (e.key === 'Enter') submitLogin();
+});
+
+// ============================================================
+// INIT
+// ============================================================
+
+async function init() {
+  buildFilterMenu();
+  await loadData();
+  renderAll();
+}
+
+init();
+</script>
+</body>
+</html>

@@ -1,0 +1,353 @@
+# =============================================================================
+# Sklad — continuous integration
+#
+# Jobs, and why each one exists:
+#
+#   go      gofmt, go vet, go mod verify, go build and the full test suite with
+#           the race detector (store, auth, api, notify, jobs, importer)
+#   web     i18n key parity (en/cs/it), TypeScript typecheck, ESLint, unit tests
+#           and the production SPA build
+#   e2e     Playwright smoke: fake camera → scan → buffer → bulk, label render
+#   secrets gitleaks over the whole git history and the working tree
+#   deploy  docker compose rendering, the Avahi service file, a throwaway
+#           certificate run and `caddy validate` for both Caddyfiles
+#   image   builds the container for linux/amd64 and smokes it end to end
+#           (health + version), then proves the multi-arch build for the NAS
+#
+# Everything runs on the free GitHub-hosted runners and needs no secrets.
+# =============================================================================
+name: CI
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+  workflow_dispatch:
+
+# Least privilege: nothing here writes to the repository.
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # ---------------------------------------------------------------------------
+  # Backend
+  # ---------------------------------------------------------------------------
+  go:
+    name: Go (format, vet, race tests)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      # Never let CI mutate go.mod/go.sum implicitly: a missing entry must fail.
+      GOFLAGS: -mod=readonly
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          # Stay on the toolchain the module declares (go.mod says 1.23.0), which
+          # is what the QNAP build uses.
+          go-version: '1.26.9'
+          cache-dependency-path: go.sum
+
+      - name: Check formatting (gofmt)
+        run: |
+          unformatted="$(gofmt -l server/ || true)"
+          if [ -n "$unformatted" ]; then
+            echo "::error::gofmt would rewrite these files:"
+            echo "$unformatted"
+            exit 1
+          fi
+
+      - name: Verify module checksums (go mod verify)
+        run: go mod verify
+
+      - name: Vet
+        run: go vet ./...
+
+      - name: Build
+        run: go build ./...
+
+      - name: Test with the race detector
+        # The importer integration test shells out to the real CLI, so it needs
+        # the legacy fixture (committed) and the go toolchain on PATH (setup-go).
+        run: go test -race ./... -count=1 -coverprofile=coverage.out
+
+      - name: Coverage summary
+        run: go tool cover -func=coverage.out | tail -1
+
+  # ---------------------------------------------------------------------------
+  # Frontend
+  # ---------------------------------------------------------------------------
+  web:
+    name: Frontend (i18n, types, lint, build, tests)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: web
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          # Node 22 matches the image build (node:22-alpine); package.json asks
+          # for >= 20.
+          node-version: 22
+          # `cache: npm` deliberately omitted: setup-node fails the job when the
+          # lock file it expects is missing, and web/package-lock.json is not
+          # committed yet. Add it back together with the lock file.
+
+      - name: Install dependencies
+        run: |
+          if [ -f package-lock.json ]; then
+            npm ci --no-audit --no-fund
+          else
+            echo "::warning::web/package-lock.json is missing - falling back to npm install (see CONTRIBUTING.md)"
+            npm install --no-audit --no-fund
+          fi
+
+      - name: i18n key parity (en -> cs, it)
+        run: npm run check:i18n
+
+      - name: Typecheck (tsc --noEmit)
+        run: npm run typecheck
+
+      - name: Lint (eslint)
+        run: npm run lint
+
+      - name: Unit tests (vitest)
+        run: npm test
+
+      - name: Production build (vite build -> web/dist)
+        run: npm run build
+
+  e2e:
+    name: Frontend end-to-end (Playwright, fake camera)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    needs: web
+    defaults:
+      run:
+        working-directory: web
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Cache Playwright browsers
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: ${{ runner.os }}-playwright-${{ hashFiles('web/package.json') }}
+          restore-keys: ${{ runner.os }}-playwright-
+
+      - name: Install dependencies
+        run: |
+          if [ -f package-lock.json ]; then
+            npm ci --no-audit --no-fund
+          else
+            npm install --no-audit --no-fund
+          fi
+
+      - name: Install Chromium for Playwright
+        run: npx playwright install --with-deps chromium
+
+      - name: Run end-to-end tests
+        run: npm run test:e2e
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.26.9'
+
+      - name: Build embedded frontend for real-backend tests
+        run: npm run build
+
+      - name: Real-backend rental integration tests
+        run: npm run test:rentals
+
+  # ---------------------------------------------------------------------------
+  # Security
+  # ---------------------------------------------------------------------------
+  secrets:
+    name: Secret scanning (gitleaks)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      GITLEAKS_VERSION: 8.30.1
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # The scan covers the whole history, so a secret that was committed and
+          # later removed is still caught.
+          fetch-depth: 0
+
+      - name: Install gitleaks (checksum verified)
+        run: |
+          base="https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}"
+          asset="gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz"
+
+          curl -sSfL --connect-timeout 10 --max-time 60 "$base/$asset" -o /tmp/gitleaks.tar.gz
+          curl -sSfL --connect-timeout 10 --max-time 60 "$base/gitleaks_${GITLEAKS_VERSION}_checksums.txt" -o /tmp/gitleaks.sums
+          ( cd /tmp && grep " $asset\$" gitleaks.sums | sha256sum -c - )
+
+          tar -xzf /tmp/gitleaks.tar.gz -C "$RUNNER_TEMP" gitleaks
+          echo "$RUNNER_TEMP" >> "$GITHUB_PATH"
+          gitleaks version
+
+      - name: Scan the full git history
+        run: gitleaks git --config .gitleaks.toml --redact --exit-code 1 --verbose
+
+      - name: Scan the working tree
+        run: gitleaks dir . --config .gitleaks.toml --redact --exit-code 1
+
+  # ---------------------------------------------------------------------------
+  # Deployment configuration
+  # ---------------------------------------------------------------------------
+  deploy:
+    name: Deployment config (compose, Caddyfile, certificates)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      # The app refuses to start without a seeded admin password, and compose's
+      # ${SKLAD_ADMIN_PASSWORD:?} guard makes that explicit.
+      SKLAD_ADMIN_PASSWORD: ci-dummy-password
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Render and inspect the compose file
+        run: |
+          cp .env.example .env
+          sed -i 's/^SKLAD_LAN_IP=.*/SKLAD_LAN_IP=192.168.1.50/' .env
+
+          docker compose config --format json > /tmp/compose.json
+
+          python3 - <<'PY'
+          import json
+
+          cfg = json.load(open("/tmp/compose.json"))
+          app, caddy = cfg["services"]["app"], cfg["services"]["caddy"]
+
+          # The container layout the Dockerfile relies on.
+          assert app["environment"]["SKLAD_DATA_DIR"] == "/data", app["environment"]
+          assert app["environment"]["SKLAD_HTTP_ADDR"] == ":8080"
+          assert app["environment"]["SKLAD_TRUST_PROXY"] == "true"
+          # The admin password guard must have produced a real value.
+          assert app["environment"]["SKLAD_ADMIN_PASSWORD"]
+          # The public origin follows SKLAD_HOST/SKLAD_PUBLIC_PORT.
+          assert app["environment"]["SKLAD_BASE_URL"].startswith("https://"), app["environment"]
+
+          # Caddy: upstream and every variable its Caddyfile interpolates.
+          assert caddy["environment"]["SKLAD_APP_UPSTREAM"] == "app:8080"
+          for key in ("SKLAD_HOST", "SKLAD_HOST_ALT", "SKLAD_LAN_IP", "SKLAD_LOG_LEVEL"):
+              assert caddy["environment"].get(key), f"caddy env {key} is empty"
+
+          # Only Caddy is published, and only on 80/443 by default.
+          published = sorted(str(p["published"]) for s in cfg["services"].values() for p in s.get("ports", []))
+          assert published == ["443", "80"], published
+          assert not app.get("ports"), "the app must not be reachable from the host"
+
+          # State lives on a volume, and the internal CA volume is declared.
+          targets = [v["target"] for v in app["volumes"]]
+          assert "/data" in targets, targets
+          assert {"sklad_data", "caddy_data", "caddy_config"} <= set(cfg["volumes"]), cfg["volumes"]
+
+          print("compose renders as expected; published ports:", published)
+          PY
+
+      - name: Validate the Avahi service file (XML)
+        run: xmllint --noout deploy/avahi/sklad.service
+
+      - name: Generate throwaway certificates
+        run: ./scripts/make-certs --out .ci-certs --hosts sklad.local,sklad --ips 127.0.0.1
+
+      - name: Caddy validate (deploy/Caddyfile, internal CA)
+        run: |
+          docker run --rm \
+            -v "$PWD/deploy/Caddyfile:/etc/caddy/Caddyfile:ro" \
+            caddy:2-alpine caddy validate --config /etc/caddy/Caddyfile --adapter caddyfile
+
+      - name: Caddy validate (deploy/Caddyfile.byo, provided certificates)
+        run: |
+          docker run --rm \
+            -v "$PWD/deploy/Caddyfile.byo:/etc/caddy/Caddyfile:ro" \
+            -v "$PWD/.ci-certs:/certs:ro" \
+            caddy:2-alpine caddy validate --config /etc/caddy/Caddyfile --adapter caddyfile
+
+      - name: The certificate script must be idempotent
+        run: |
+          ./scripts/make-certs --out .ci-certs --hosts sklad.local,sklad --ips 127.0.0.1 | tee /tmp/make-certs.log
+          grep -q "already covers every requested name" /tmp/make-certs.log
+
+  # ---------------------------------------------------------------------------
+  # Container image
+  # ---------------------------------------------------------------------------
+  image:
+    name: Container image (build + boot smoke test)
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: docker/setup-qemu-action@v3
+
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Build the amd64 image (NAS architecture)
+        run: |
+          docker buildx build --platform linux/amd64 --load \
+            --tag sklad:ci \
+            --cache-from type=gha,scope=amd64 --cache-to type=gha,mode=max,scope=amd64 \
+            --build-arg VERSION="ci-${GITHUB_SHA::7}" \
+            --build-arg COMMIT="${GITHUB_SHA::7}" \
+            --build-arg BUILD_TIME="$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+            .
+
+      - name: The container must migrate, seed and answer health
+        run: |
+          docker run -d --name sklad-ci \
+            -e SKLAD_ADMIN_PASSWORD=ci-dummy-password \
+            -v sklad-ci-data:/data \
+            sklad:ci
+
+          healthy=0
+          for attempt in $(seq 1 30); do
+            if docker exec sklad-ci wget -qO- http://127.0.0.1:8080/api/v1/health | grep -q '"status":"ok"'; then
+              healthy=1
+              break
+            fi
+            sleep 1
+          done
+          if [ "$healthy" != "1" ]; then
+            echo "::error::the container never reported a healthy status"
+            docker logs sklad-ci
+            docker rm -f sklad-ci
+            exit 1
+          fi
+
+          echo "health:  $(docker exec sklad-ci wget -qO- http://127.0.0.1:8080/api/v1/health)"
+          echo "version: $(docker exec sklad-ci wget -qO- http://127.0.0.1:8080/api/v1/version)"
+          echo "size:    $(docker image inspect sklad:ci --format '{{.Size}}') bytes"
+
+          # The embedded SPA must be served too (the placeholder page only
+          # appears when the frontend build produced no dist/index.html).
+          docker exec sklad-ci wget -qO- http://127.0.0.1:8080/ | grep -qi '<!doctype html'
+          docker rm -f sklad-ci
+
+      - name: Build linux/amd64 and linux/arm64 (multi-arch proof)
+        # Emulated arm64 builds are slow, so they run outside pull requests.
+        if: github.event_name != 'pull_request'
+        timeout-minutes: 35
+        run: |
+          docker buildx build --platform linux/amd64,linux/arm64 \
+            --cache-from type=gha,scope=multiarch --cache-to type=gha,mode=max,scope=multiarch \
+            --build-arg VERSION="ci-${GITHUB_SHA::7}" \
+            --build-arg COMMIT="${GITHUB_SHA::7}" \
+            --build-arg BUILD_TIME="$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+            --tag sklad:ci-multiarch \
+            .

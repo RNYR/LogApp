@@ -1,0 +1,97 @@
+# =============================================================================
+# Sklad — Caddy edge (BYO certificates)
+#
+# Identical to deploy/Caddyfile except that TLS material is provided by the
+# operator instead of Caddy's internal CA. Use it for:
+#
+#   * a real domain name with a publicly trusted certificate (Let's Encrypt via
+#     DNS-01, corporate CA, purchased certificate), or
+#   * certificates generated locally with scripts/make-certs (useful when other
+#     services must trust the same CA, or when you want a longer-lived CA).
+#
+# Files expected in the mounted certificate directory (/certs, read-only):
+#
+#   /certs/sklad.crt    server certificate, full chain (leaf first, then CA)
+#   /certs/sklad.key    matching private key
+#   /certs/rootCA.pem   the CA certificate, offered at /ca.crt for device trust
+#                       (skip it if your CA is already trusted by the clients;
+#                       the route then returns 404, which is harmless)
+#
+# Enable it by pointing the compose Caddyfile mount at this file:
+#
+#   CADDYFILE=deploy/Caddyfile.byo      # in .env, then: docker compose up -d
+#
+# The same SKLAD_* variables as deploy/Caddyfile apply. Certificate renewal is
+# the operator's job (for example a cron entry running scripts/make-certs, or
+# your ACME client); Caddy reloads files from disk automatically, so renewing
+# in place needs no restart as long as the paths above stay the same.
+# =============================================================================
+
+{
+	admin off
+	skip_install_trust
+
+	log {
+		output stdout
+		format json
+		level {$SKLAD_LOG_LEVEL:INFO}
+	}
+}
+
+# -----------------------------------------------------------------------------
+# HTTP → HTTPS
+# -----------------------------------------------------------------------------
+http://{$SKLAD_HOST:sklad.local}, http://{$SKLAD_HOST_ALT:sklad} {
+	redir https://{$SKLAD_HOST:sklad.local}{$SKLAD_PUBLIC_PORT}{uri} permanent
+}
+
+http://{$SKLAD_LAN_IP:127.0.0.1} {
+	redir https://{$SKLAD_LAN_IP:127.0.0.1}{$SKLAD_PUBLIC_PORT}{uri} permanent
+}
+
+# -----------------------------------------------------------------------------
+# HTTPS
+# -----------------------------------------------------------------------------
+{$SKLAD_HOST:sklad.local}, {$SKLAD_HOST_ALT:sklad}, {$SKLAD_LAN_IP:127.0.0.1} {
+	# Provided certificate. The certificate must cover every address in the site
+	# line above; check with:
+	#   openssl x509 -in deploy/certs/sklad.crt -noout -ext subjectAltName
+	tls /certs/sklad.crt /certs/sklad.key
+
+	header {
+		Strict-Transport-Security "max-age={$SKLAD_HSTS_MAX_AGE:31536000}; includeSubDomains"
+		X-Content-Type-Options "nosniff"
+		X-Frame-Options "DENY"
+		Referrer-Policy "no-referrer"
+		Cross-Origin-Opener-Policy "same-origin"
+		X-Robots-Tag "noindex, nofollow"
+		-Server
+	}
+
+	encode zstd gzip
+
+	request_body {
+		max_size {$SKLAD_MAX_UPLOAD:10MB}
+	}
+
+	log {
+		output stdout
+		format json
+	}
+
+	# Root CA download for devices that still need to trust it.
+	handle /ca.crt {
+		root * /certs
+		rewrite * /rootCA.pem
+		header Content-Type "application/x-pem-file"
+		header Content-Disposition "inline; filename=sklad-root-ca.crt"
+		header Cache-Control "no-store"
+		file_server
+	}
+
+	handle {
+		reverse_proxy {$SKLAD_APP_UPSTREAM:app:8080} {
+			header_up X-Real-IP {remote_host}
+		}
+	}
+}

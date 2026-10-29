@@ -1,23 +1,75 @@
-# Python
-__pycache__/
-*.pyc
-*.pyo
-*.pyd
-.venv/
-venv/
+# =============================================================================
+# Sklad — .gitignore
+# =============================================================================
 
-# Environment / secrets
+# --- Secrets & local configuration -------------------------------------------
 .env
+.env.*
+!.env.example
 
-# Runtime data
-app/data/inventory.json
-app/data/*.lock
-app/data/*.tmp
-app/data/backups/
-app/data/hourly_backups/
+# --- Runtime data, databases & backups ---------------------------------------
+data/
+*.db
+*.db-*
+*.sqlite
+*.sqlite3
+*.sqlite3-*
+*.db-wal
+*.db-shm
 
-# Editor / OS
-.vscode/
-.idea/
+# --- Certificates & private keys (never commit) ------------------------------
+*.pem
+*.key
+*.crt
+*.csr
+*.srl
+*.p12
+*.pfx
+certs/*
+!certs/README.md
+deploy/certs/*
+!deploy/certs/README.md
+
+# --- Go build output ---------------------------------------------------------
+/server/sklad
+/bin/
+/dist/
+*.test
+*.out
+coverage.out
+coverage.html
+
+# --- Frontend / Node ---------------------------------------------------------
+node_modules/
+web/dist/*
+!web/dist/.gitkeep
+web/.vite/
+web/coverage/
+*.tsbuildinfo
+.turbo/
+playwright-report/
+test-results/
+blob-report/
+
+# --- Logs & temporary files --------------------------------------------------
+*.log
+tmp/
+.tmp/
+*.tmp
+
+# --- OS & editor cruft -------------------------------------------------------
 .DS_Store
 Thumbs.db
+.idea/
+.vscode/*
+!.vscode/extensions.json
+*.swp
+*.swo
+*~
+
+# Generated NAS bundle (scripts/make-test-bundle)
+sklad-test/
+
+# Not part of the repository
+sites/sklad-dark/
+secret_traits_bot.zip

@@ -1,0 +1,47 @@
+<?xml version="1.0" standalone='no'?>
+<!DOCTYPE service-group SYSTEM "avahi-service.dtd">
+<!--
+  Sklad — mDNS / Bonjour advertisement for the HTTPS edge.
+
+  Install this file on the HOST, not inside the container:
+
+    Linux / Avahi      sudo cp deploy/avahi/sklad.service /etc/avahi/services/
+                       sudo systemctl restart avahi-daemon
+    macOS              the system Bonjour daemon already publishes services;
+                       this file is for Avahi hosts (a NAS, a Raspberry Pi)
+    QNAP               install Avahi ("Bonjour" is built into some QTS builds)
+                       and drop the file into /etc/avahi/services/ via SSH,
+                       e.g. /share/Container/avahi/sklad.service when Avahi runs
+                       as a container
+
+  Two things have to line up for https://sklad.local to work:
+
+    1. the name has to RESOLVE. mDNS only answers for names the host owns, so
+       set the machine's own mDNS host name to "sklad" (host-name=sklad in
+       /etc/avahi/avahi-daemon.conf, or the equivalent QTS setting) and restart
+       Avahi. A router/DNS entry for sklad.local → the NAS address works too.
+    2. the certificate has to COVER the name. The internal CA issues for
+       SKLAD_HOST / SKLAD_HOST_ALT / SKLAD_LAN_IP (see deploy/Caddyfile), so keep
+       SKLAD_HOST=sklad.local and SKLAD_LAN_IP=<nas address> in .env.
+
+  Port notes:
+    * <port> must be the port clients connect to. It is 443 by default; when QTS
+      already owns 443 and the deployment publishes 8443 instead, change it to
+      8443 here as well (and set SKLAD_PUBLIC_PORT=:8443 in .env).
+    * Element order is fixed by the DTD: type, domain-name?, host-name?, port,
+      txt-record*.
+
+  If the NAS keeps its own mDNS name (for example qnap.local), drop the
+  <host-name> element: the service then points at the machine's real name.
+  Access by address (https://<nas-ip>) keeps working either way, because the
+  certificate carries the LAN IP as a SAN.
+-->
+<service-group>
+  <name>Sklad</name>
+  <service>
+    <type>_https._tcp</type>
+    <host-name>sklad.local</host-name>
+    <port>443</port>
+    <txt-record>path=/</txt-record>
+  </service>
+</service-group>

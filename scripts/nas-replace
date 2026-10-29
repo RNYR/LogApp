@@ -1,0 +1,107 @@
+#!/bin/sh
+# =============================================================================
+# scripts/nas-replace — runs ON THE NAS (called by scripts/push-test-to-nas)
+#
+# Replaces whatever Sklad TEST stack is currently installed with the freshly
+# uploaded bundle:
+#
+#   1. removes the old test containers (sklad-test-app, sklad-test-caddy),
+#      the sklad:test image, the sklad_test network and — unless --keep-data —
+#      the sklad_test_* volumes (test database + test CA)
+#   2. replaces the target folder with the new files, keeping .env.test
+#   3. builds and starts the new test stack (unless --no-start or no .env.test)
+#
+# Only names starting with sklad-test / sklad_test / sklad:test are touched.
+# The old equipment-log app and any live Sklad stack are never affected.
+#
+#   sh nas-replace --incoming DIR --target DIR [--keep-data] [--no-start]
+# =============================================================================
+set -eu
+
+INCOMING=
+TARGET=
+KEEP_DATA=0
+START=1
+while [ $# -gt 0 ]; do
+	case "$1" in
+		--incoming) INCOMING=$2; shift 2 ;;
+		--target)   TARGET=$2; shift 2 ;;
+		--keep-data) KEEP_DATA=1; shift ;;
+		--no-start) START=0; shift ;;
+		*) echo "nas-replace: unknown option $1" >&2; exit 1 ;;
+	esac
+done
+
+die() { echo "nas-replace: $*" >&2; exit 1; }
+[ -n "$INCOMING" ] && [ -d "$INCOMING" ] || die "--incoming folder missing"
+[ -n "$TARGET" ] || die "--target missing"
+case "$TARGET" in
+	*sklad*) ;;
+	*) die "refusing target '$TARGET': path must contain 'sklad'" ;;
+esac
+[ "$TARGET" != "/" ] || die "refusing target /"
+
+# Docker / compose locations on QNAP Container Station (non-login SSH shells
+# do not always have them on PATH).
+PATH=/share/Container/bin:/share/CACHEDEV1_DATA/.qpkg/container-station/bin:$PATH
+export PATH
+command -v docker >/dev/null 2>&1 || die "docker not found"
+
+echo "== Removing the current test stack"
+for c in sklad-test-caddy sklad-test-app; do
+	if docker inspect "$c" >/dev/null 2>&1; then
+		docker rm -f "$c" >/dev/null && echo "   removed container $c"
+	fi
+done
+if [ "$KEEP_DATA" = 0 ]; then
+	for v in sklad_test_data sklad_test_caddy_data sklad_test_caddy_config; do
+		if docker volume inspect "$v" >/dev/null 2>&1; then
+			docker volume rm "$v" >/dev/null && echo "   removed volume $v"
+		fi
+	done
+else
+	echo "   keeping test volumes (--keep-data)"
+fi
+if docker network inspect sklad_test >/dev/null 2>&1; then
+	docker network rm sklad_test >/dev/null && echo "   removed network sklad_test"
+fi
+if docker image inspect sklad:test >/dev/null 2>&1; then
+	docker image rm sklad:test >/dev/null && echo "   removed image sklad:test"
+fi
+
+echo "== Replacing files in $TARGET"
+ENV_KEEP=
+if [ -f "$TARGET/.env.test" ]; then
+	ENV_KEEP="$INCOMING/.env.test.keep"
+	cp "$TARGET/.env.test" "$ENV_KEEP"
+fi
+rm -rf "$TARGET"
+mkdir -p "$(dirname "$TARGET")"
+mv "$INCOMING" "$TARGET"
+if [ -n "$ENV_KEEP" ]; then
+	mv "$TARGET/.env.test.keep" "$TARGET/.env.test"
+	chmod 600 "$TARGET/.env.test"
+	echo "   kept your .env.test"
+fi
+chmod +x "$TARGET/scripts/test-stack" "$TARGET/scripts/nas-replace"
+
+cd "$TARGET"
+if [ ! -f .env.test ]; then
+	cat <<NEXT
+== First install: create the config, then start
+   cd $TARGET
+   cp .env.test.example .env.test && chmod 600 .env.test
+   vi .env.test     # SKLAD_TEST_LAN_IP and SKLAD_ADMIN_PASSWORD
+   ./scripts/test-stack up
+NEXT
+	exit 0
+fi
+if [ "$START" = 0 ]; then
+	echo "== Not starting (--no-start). Run: cd $TARGET && ./scripts/test-stack up"
+	exit 0
+fi
+
+echo "== Building and starting the new test stack (first build can take 10-30 min)"
+./scripts/test-stack up
+echo
+./scripts/test-stack ps

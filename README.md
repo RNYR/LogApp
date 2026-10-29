@@ -1,261 +1,236 @@
-# Equipment Log
+> Current access model: anonymous Editor for rentals; authenticated Admin for administration. See [role permissions](docs/roles-and-functions.md) and [rental rollout and tests](docs/RENTAL-WORKFLOW.md). Earlier Viewer/Editor account descriptions are superseded.
 
-A lightweight web-based equipment inventory log built with a simple **HTML/CSS/JavaScript frontend** and a **Python Flask backend**.
+# Sklad
 
-The application provides a clean interface for tracking equipment items, updating their status, adding notes, and managing the inventory through an admin edit mode.
+> **Equipment Inventory & Lending** — a self-hosted web app for tracking company
+> equipment: what you own, where it is, who has it, and when it is due back.
 
-This project is intended for small internal deployments or as a starting point for a more advanced inventory management tool.
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+[![Go](https://img.shields.io/badge/Go-1.23-00ADD8.svg)](https://go.dev)
+[![TypeScript](https://img.shields.io/badge/TypeScript-React-3178C6.svg)](https://www.typescriptlang.org/)
 
----
-
-## Features
-
-- Clean single-page interface
-- Fast search across multiple fields
-- Inline status updates
-- Inline note editing
-- Admin edit mode for full inventory management
-- Add and delete inventory entries
-- JSON file-based storage (no database required)
-- Automatic save backups
-- Automatic hourly backups
-- Edit locking to prevent conflicting changes
+**Created by David Žitník.** Open source under the MIT License — see
+[LICENSE](LICENSE) and [NOTICE](NOTICE).
 
 ---
 
-## Technology Stack
+## Overview
 
-### Frontend
-- HTML  
-- CSS  
-- JavaScript  
+Sklad is a ground-up, production-minded rewrite of an internal equipment-log
+tool. It is designed to be small enough for a five-person workshop yet solid
+enough for a larger organisation: real authentication and roles, an audit trail,
+optimistic concurrency instead of file locks, a normalised SQLite database, and
+a modern single-page frontend.
 
-### Backend
-- Python  
-- Flask  
+It is built to run on a **QNAP TS-251** (x86-64) via Docker/Container Station and
+to be reachable on the LAN at **https://sklad.local**, with HTTPS and camera
+access working on laptops, Android, and iOS.
 
-### Other Libraries
-- `filelock` (for safe file access)
+### Highlights
 
----
+- 🔐 **HTTPS by default** — automatic local CA + certificate for `sklad.local`,
+  so browser camera APIs (which require a secure context) work everywhere.
+- 📷 **Built-in CODE128 scanner** — scan labels with a laptop/phone camera
+  (`BarcodeDetector` with a ZXing fallback for iOS Safari), plus HID
+  keyboard-wedge and manual entry.
+- 🏷️ **PT-E300 label preparation** — exact asset IDs and manual CODE128 keypad instructions, followed by scan verification.
+- 📦 **Scan → buffer → bulk actions** — scan many items into a buffer and apply
+  status/date/note changes in one transaction.
+- 🤖 **Discord notifications** — overdue-item reports are posted to a Discord
+  webhook instead of email, with a delivery log and no duplicate sends.
+- 🌍 **Trilingual UI** — Czech, English, and Italian, switchable at runtime.
+- 👥 **Real auth & RBAC** — Argon2id password hashing, session cookies, CSRF
+  protection, anonymous Editor rental access, authenticated Admin administration, and an audit log.
+- 🗄️ **SQLite storage** — pure-Go `modernc.org/sqlite` (no CGO), WAL mode,
+  append-only migrations, and scheduled consistent `VACUUM INTO` database backups.
+- 🧭 **mDNS** — discoverable as `sklad.local` on the local network.
 
-## Project Structure
-
-```text
-.
-├── server.py
-├── requirements.txt
-├── .env.example
-├── .gitignore
-├── README.md
-└── app/
-    └── index.html
-```
-
-### Runtime Directories
-
-These are created automatically when the server runs:
-
-```text
-app/
-└── data/
-    ├── inventory.json
-    ├── backups/
-    └── hourly_backups/
-```
+> **Version 2.0.0.** The architecture, API, schema and i18n contracts are frozen
+> in [docs/contracts](docs/contracts) and [openapi/openapi.yaml](openapi/openapi.yaml);
+> the implementation is complete and covered by Go + frontend test suites and CI
+> (see [.github/workflows/ci.yml](.github/workflows/ci.yml)).
 
 ---
 
-## Requirements
+## Architecture at a glance
 
-- Python **3.10+**
-- `pip`
+| Layer      | Technology                                                                 |
+|------------|----------------------------------------------------------------------------|
+| Frontend   | React + TypeScript + Tailwind CSS (Vite), i18next (en/cs/it)               |
+| Backend    | Go 1.23, `net/http` + `chi`, embedded SPA (`go:embed`)                     |
+| Storage    | SQLite via `modernc.org/sqlite` (CGO-free), WAL, embedded migrations      |
+| Edge / TLS | Caddy with an internal CA for `sklad.local` (HTTP→HTTPS redirect)          |
+| Discovery  | Avahi/Bonjour mDNS (`_https._tcp`)                                         |
+| Packaging  | Multi-stage Dockerfile, `docker-compose.yml` (app + Caddy), non-root       |
 
 ---
 
-## Installation
+## Quick start (Docker)
 
-Clone the repository:
+> Requires Docker and Docker Compose. On the QNAP, install **Container Station**
+> and use the SSH/compose workflow described in
+> [docs/DEPLOY-QNAP.md](docs/DEPLOY-QNAP.md).
 
 ```bash
-git clone https://github.com/RNYR/LogApp.git
+# 1. Get the code
+git clone https://github.com/RNYR/LogApp.git sklad && cd sklad
+
+# 2. Configure
+cp .env.example .env
+#    Edit .env and set at least SKLAD_ADMIN_PASSWORD (and the correct
+#    NAS hostname/IP and ports).
+
+# 3. Build and start
+docker compose up -d --build
+
+# 4. Open the app
+#    https://sklad.local           (after trusting the Sklad local CA)
+#    https://<nas-lan-ip>:8443     (if QTS owns ports 80/443)
 ```
 
-Enter the project directory:
+On first start the app seeds the admin account from `SKLAD_ADMIN_USERNAME` /
+`SKLAD_ADMIN_PASSWORD`. You are **required to change that password on first
+login**.
 
-```bash
-cd equipment-log
-```
+### Trusting the local CA (required for camera access)
 
-Install dependencies:
+Browsers only expose the camera on a *trusted* HTTPS origin. On first boot Caddy
+issues a certificate from Sklad's local root CA; download it at
+`https://sklad.local/ca.crt` and install it on each device (iOS profile, Android
+CA install, macOS Keychain, Windows certificate store). Full per-OS instructions
+are in [docs/TLS-CAMERA.md](docs/TLS-CAMERA.md).
 
-```bash
-pip install -r requirements.txt
-```
+---
+
+## `sklad.local` (mDNS)
+
+An Avahi/Bonjour service record advertises the app as `sklad.local` on
+`_https._tcp`. If the QNAP already provides mDNS, or if ports 80/443 are taken
+by QTS, the advertised port and host ports are configurable — see the port table
+in [docs/contracts/config.md](docs/contracts/config.md) and the QNAP runbook.
 
 ---
 
 ## Configuration
 
-Before running the application, set the required environment variables.
+All environment variables and their defaults are defined in the frozen contract
+[docs/contracts/config.md](docs/contracts/config.md) and mirrored in
+[.env.example](.env.example). Runtime-editable settings (Discord webhook, daily
+check hour, default locale) live in the database and are managed from the admin
+UI.
 
-These define the administrator login credentials and server port.
+**Secrets policy:** `SKLAD_ADMIN_PASSWORD` and the Discord webhook URL are
+secrets — never logged, never baked into images, never returned unmasked by the
+API. `.env` and the `data/` volume are gitignored.
 
-### Linux / macOS
+---
+
+## Project layout
+
+```
+sklad/
+├── server/                 # Go backend (module root is the repo root)
+│   ├── cmd/sklad/          # server main package
+│   ├── cmd/import-json/    # legacy JSON → SQLite importer
+│   └── internal/           # config, api, store, auth, notify, jobs, …
+├── web/                    # React + TypeScript SPA (Vite)
+│   ├── src/locales/        # en.json (source of truth), cs.json, it.json
+│   └── dist/               # built assets, embedded into the Go binary
+├── openapi/openapi.yaml    # versioned REST API contract (/api/v1)
+├── docs/                   # contracts + deployment/TLS/label runbooks
+│   └── contracts/          # schema.md, barcode.md, config.md (frozen)
+├── deploy/                 # Caddyfile, avahi service, cert docs
+├── scripts/                # cert helpers (make-certs)
+├── equipment-log/          # legacy reference implementation (nested module)
+├── Dockerfile
+├── docker-compose.yml
+├── go.mod                  # module sklad
+└── .env.example
+```
+
+> Directories marked above that do not yet exist are created by their respective
+> build tasks; the contracts they must implement are already frozen.
+
+---
+
+## Development
+
+**Prerequisites:** Go **1.23+** (backend) and Node **20+** (frontend). Docker is
+optional for local work but required for the full TLS/mDNS stack.
 
 ```bash
-export LOGAPP_ADMIN_USERNAME="admin"
-export LOGAPP_ADMIN_PASSWORD="change-this-password"
-export PORT="8787"
+# Backend
+go build ./server/...
+go test -race ./server/...
+
+# Frontend
+cd web
+npm install
+npm run dev          # dev server (proxies /api to the Go backend)
+npm run build        # production build -> web/dist (embedded by Go)
+npm run lint
+npm run typecheck
 ```
 
-### Windows PowerShell
-
-```powershell
-$env:LOGAPP_ADMIN_USERNAME="admin"
-$env:LOGAPP_ADMIN_PASSWORD="change-this-password"
-$env:PORT="8787"
-```
+See [CONTRIBUTING.md](CONTRIBUTING.md) for conventions, testing expectations,
+and the i18n key-parity rule.
 
 ---
 
-## Running the Application
+## Migrating from the legacy `equipment-log` app
 
-Start the Flask server:
+The legacy JSON data is imported into SQLite by an idempotent importer
+(`server/cmd/import-json`, with `--dry-run` and `--pre-snapshot`), preserving
+every item ID verbatim — including the intentional `PV-049` gap — along with
+types, statuses, dates, and notes. Legacy SMTP settings are intentionally
+ignored (Discord replaces email).
 
 ```bash
-python server.py
-```
-
-Open the application in your browser:
-
-```text
-http://localhost:8787
+go run ./server/cmd/import-json \
+  -db /path/to/data/sklad.db \
+  -data-dir /path/to/data \
+  -source equipment-log/app/data
 ```
 
 ---
 
-## How the Application Works
+## Documentation
 
-The Flask backend serves a single-page frontend and provides API endpoints for managing inventory data.
+**Runbooks**
 
-Inventory information is stored in a JSON file and automatically backed up whenever changes are saved.
+- [docs/DEPLOY-QNAP.md](docs/DEPLOY-QNAP.md) — install on a QNAP NAS (Container
+  Station, SSH compose, port conflicts, backups, upgrades)
+- [docs/TLS-CAMERA.md](docs/TLS-CAMERA.md) — root CA trust per platform and
+  camera troubleshooting (HTTPS is required for scanning)
+- [docs/LABELS.md](docs/LABELS.md) — CODE128 labels and the Brother P-Touch E300
+  workflow
 
-Two usage modes exist:
+**Contracts**
 
-### Normal Mode
-
-Users can:
-- Change equipment status
-- Update item notes
-
-### Admin Mode
-
-Admin users can:
-- Add new entries
-- Edit item names
-- Edit serial/part numbers
-- Edit equipment types
-- Edit status
-- Edit notes
-- Delete entries
-
-Admin access requires the credentials defined in environment variables.
+- [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) — design decisions and module map
+- [docs/contracts/schema.md](docs/contracts/schema.md) — SQLite schema v1
+- [docs/contracts/barcode.md](docs/contracts/barcode.md) — CODE128 / label rules
+- [docs/contracts/config.md](docs/contracts/config.md) — env + settings keys
+- [openapi/openapi.yaml](openapi/openapi.yaml) — REST API contract (`/api/v1`)
+- [deploy/certs/README.md](deploy/certs/README.md) — certificate modes and
+  `scripts/make-certs`
 
 ---
 
-## Data Storage
+## Contributing
 
-Inventory data is stored in:
+Issues and pull requests are welcome. Please read
+[CONTRIBUTING.md](CONTRIBUTING.md) first.
 
-```text
-app/data/inventory.json
-```
+## Security
 
-Backup files are automatically generated in:
-
-```text
-app/data/backups/
-app/data/hourly_backups/
-```
-
-Backups help recover previous inventory states if data becomes corrupted or accidentally modified.
-
----
-
-## Locking System
-
-The application includes a simple in-memory editing lock to prevent simultaneous conflicting writes.
-
-### Key Behaviors
-
-- Only one editing session can hold the lock at a time
-- Lock modes include `admin` and `normal`
-- Locks expire automatically after a timeout
-- Saving changes refreshes the lock expiration
-
-Restarting the server clears any active lock.
-
----
-
-## Deployment Notes
-
-This project intentionally avoids using a database to keep setup simple.
-
-For larger deployments you may want to extend it with:
-
-- Database storage (PostgreSQL, SQLite, etc.)
-- User accounts and role management
-- HTTPS support
-- Proper authentication pages
-- Audit logging
-- API authentication tokens
-
----
-
-## Running as a Windows Service
-
-The application can be run as a background service using tools such as **NSSM**.
-
-Typical setup:
-
-1. Install Python and project dependencies  
-2. Configure environment variables for admin credentials  
-3. Create an NSSM service pointing to Python  
-4. Use `server.py` as the startup script  
-5. Set the working directory to the project folder  
-
----
-
-## Files to Exclude from Version Control
-
-Do **not** commit the following files to GitHub:
-
-- `.env`
-- `app/data/inventory.json`
-- `app/data/backups/`
-- `app/data/hourly_backups/`
-- temporary lock files
-- any private inventory records
-
-Use the provided `.gitignore` file to prevent accidental uploads.
-
----
-
-## Security Notes
-
-Before publishing this project or deploying it publicly:
-
-- never commit real credentials
-- remove any real inventory data
-- avoid including serial numbers, customer names, or internal references
-- use strong admin passwords
-- consider replacing browser prompts with a proper login form
-
----
+Please report vulnerabilities privately — see [SECURITY.md](SECURITY.md).
 
 ## License
 
-This project is licensed under the **MIT License**.
+MIT © 2026 David Žitník. See [LICENSE](LICENSE). Third-party attributions are in
+[NOTICE](NOTICE).
 
-See the `LICENSE` file for details.
+## Operations
+
+Automatic SQLite backups run at startup and every 24h by default (`SKLAD_BACKUP_INTERVAL`), retaining 50 copies. `sklad backup` makes an on-demand copy. Offline `sklad reset-admin --password-stdin` recovers Admin access without deleting inventory. Follow [the NAS staging guide](docs/DEPLOY-QNAP.md) for safe off-NAS backups, restoration and recovery.

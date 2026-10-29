@@ -1,0 +1,27 @@
+<?xml version="1.0" standalone='no'?>
+<!DOCTYPE service-group SYSTEM "avahi-service.dtd">
+<!--
+  Sklad TEST stack — mDNS / Bonjour advertisement (https://sklad-test.local:8444)
+
+  Install on the HOST next to sklad.service; the live advertisement is untouched:
+
+    cp deploy/avahi/sklad-test.service /etc/avahi/services/
+
+  The live name "sklad.local" is the NAS's own mDNS host name. A second name
+  needs its own address record, so ALSO add one line to /etc/avahi/hosts:
+
+    <nas-lan-ip>  sklad-test.local
+
+  then restart Avahi. (A router/DNS entry sklad-test.local -> NAS address works
+  too.) <port> must match SKLAD_TEST_HTTPS_PORT in .env.test.
+  Remove both again when the test stack is retired.
+-->
+<service-group>
+  <name>Sklad TEST</name>
+  <service>
+    <type>_https._tcp</type>
+    <host-name>sklad-test.local</host-name>
+    <port>8444</port>
+    <txt-record>path=/</txt-record>
+  </service>
+</service-group>

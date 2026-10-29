@@ -1,0 +1,19 @@
+services:
+  equipment-log:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: equipment-log:local
+    container_name: equipment-log
+    ports:
+      - "80:8787"
+      - "8787:8787"
+    environment:
+      LOGAPP_ADMIN_USERNAME: "pekat"
+      LOGAPP_ADMIN_PASSWORD: "traktor"
+      PORT: "8787"
+      CHECK_HOUR: "11"
+    volumes:
+      - ./app/data:/opt/equipment-log/app/data
+    restart: unless-stopped
+

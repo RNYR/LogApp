@@ -1,0 +1,35 @@
+#!/usr/bin/env bash
+# =============================================================================
+# scripts/make-test-bundle — (re)create ./sklad-test with exactly what the NAS
+# needs to build and run the TEST stack (https://sklad-test.local:8444).
+#
+#   ./scripts/make-test-bundle            # writes ./sklad-test
+#   ./scripts/push-test-to-nas <ssh-host> # then copy it to the NAS
+#
+# Contents: Dockerfile, .dockerignore, go.mod/go.sum, server/, web/ (without
+# node_modules, dist, test-results), docker-compose.test.yml,
+# .env.test.example, deploy/Caddyfile.test, deploy/avahi/sklad-test.service,
+# scripts/test-stack, scripts/nas-replace and docs/DEPLOY-TEST.md. The folder is rebuilt from
+# scratch each run; it is git- and docker-ignored.
+# =============================================================================
+set -euo pipefail
+
+cd "$(dirname "$0")/.."
+OUT=sklad-test
+
+rm -rf "$OUT"
+mkdir -p "$OUT/deploy/avahi" "$OUT/scripts" "$OUT/docs"
+
+cp Dockerfile .dockerignore go.mod go.sum docker-compose.test.yml .env.test.example "$OUT/"
+cp deploy/Caddyfile.test "$OUT/deploy/"
+cp deploy/avahi/sklad-test.service "$OUT/deploy/avahi/"
+cp scripts/test-stack scripts/nas-replace "$OUT/scripts/"
+cp docs/DEPLOY-TEST.md "$OUT/docs/"
+chmod +x "$OUT/scripts/test-stack" "$OUT/scripts/nas-replace"
+
+EXCLUDES=(--exclude node_modules --exclude dist --exclude test-results
+          --exclude playwright-report --exclude coverage --exclude .DS_Store)
+rsync -a "${EXCLUDES[@]}" server "$OUT/"
+rsync -a "${EXCLUDES[@]}" web "$OUT/"
+
+echo "Created $OUT/ ($(find "$OUT" -type f | wc -l | tr -d ' ') files, $(du -sh "$OUT" | cut -f1))"

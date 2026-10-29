@@ -1,0 +1,89 @@
+#!/usr/bin/env sh
+# =============================================================================
+# scripts/test-stack — run the Sklad TEST stack beside the live one
+#
+# Always uses project "sklad-test", docker-compose.test.yml and .env.test, so a
+# command typed here can never touch the live sklad.local containers, image or
+# volumes. Run it from the project folder (or anywhere: it cd's there itself).
+#
+#   ./scripts/test-stack up           build the sklad:test image and start
+#   ./scripts/test-stack up-nobuild   start from an already loaded sklad:test
+#   ./scripts/test-stack ps           container health
+#   ./scripts/test-stack logs         follow test-app + test-caddy logs
+#   ./scripts/test-stack restart      restart both test containers
+#   ./scripts/test-stack down         stop and remove the test containers
+#                                     (test data and test CA are kept)
+#   ./scripts/test-stack reset        down + DELETE the test volumes
+#                                     (empty database and a NEW test CA next time)
+#   ./scripts/test-stack config       print the resolved compose config
+#   ./scripts/test-stack compose ...  any other docker compose subcommand
+#
+# See docs/DEPLOY-TEST.md.
+# =============================================================================
+set -eu
+
+cd "$(dirname "$0")/.."
+
+PROJECT=sklad-test
+FILE=docker-compose.test.yml
+ENVFILE=.env.test
+
+die() { echo "test-stack: $*" >&2; exit 1; }
+
+[ -f "$FILE" ] || die "$FILE not found (run from the Sklad project folder)"
+[ -f "$ENVFILE" ] || die "$ENVFILE missing: cp .env.test.example $ENVFILE and fill it in"
+
+# Export .env.test so the SKLAD_TEST_* keys reach compose's ${...} substitution.
+# (Works with old docker-compose builds that lack --env-file.)
+set -a
+# shellcheck disable=SC1090
+. "./$ENVFILE"
+set +a
+
+[ -n "${SKLAD_ADMIN_PASSWORD:-}" ] || die "set SKLAD_ADMIN_PASSWORD in $ENVFILE"
+
+# Refuse ports the live stack uses.
+live_ports="80 443"
+if [ -f .env ]; then
+	lp=$(sed -n 's/^SKLAD_HTTP_PORT=//p; s/^SKLAD_HTTPS_PORT=//p' .env | tr -d '"'"'"' \r')
+	live_ports="$live_ports $lp"
+fi
+for p in ${SKLAD_TEST_HTTP_PORT:-8081} ${SKLAD_TEST_HTTPS_PORT:-8444}; do
+	for q in $live_ports; do
+		[ "$p" != "$q" ] || die "port $p is used by the live stack; pick another SKLAD_TEST_*_PORT in $ENVFILE"
+	done
+done
+
+if docker compose version >/dev/null 2>&1; then
+	compose() { docker compose -p "$PROJECT" -f "$FILE" "$@"; }
+elif command -v docker-compose >/dev/null 2>&1; then
+	compose() { docker-compose -p "$PROJECT" -f "$FILE" "$@"; }
+else
+	die "neither 'docker compose' nor 'docker-compose' is available"
+fi
+
+cmd=${1:-}
+[ $# -gt 0 ] && shift
+
+case "$cmd" in
+	up)          compose up -d --build "$@" ;;
+	up-nobuild)  compose up -d --no-build "$@" ;;
+	ps)          compose ps "$@" ;;
+	logs)        compose logs -f --tail=100 "$@" ;;
+	restart)     compose restart "$@" ;;
+	down)        compose down "$@" ;;
+	reset)
+		echo "This deletes the TEST database and the TEST CA (volumes sklad_test_*)."
+		echo "The live sklad.local stack is not affected."
+		printf 'Type "reset" to continue: '
+		read -r answer
+		[ "$answer" = "reset" ] || die "aborted"
+		compose down -v "$@"
+		;;
+	config)      compose config "$@" ;;
+	compose)     compose "$@" ;;
+	*)
+		sed -n '4,21p' "$0" | sed 's/^# \{0,1\}//'
+		[ -z "$cmd" ] || exit 1
+		;;
+esac
