@@ -114,10 +114,10 @@ preflight() {
 	[ "${hsts:-31536000}" = 0 ] || echo "   note: SKLAD_HSTS_MAX_AGE=${hsts:-31536000}; keep 0 until every device trusts the CA"
 	http=$(env_get SKLAD_HTTP_PORT); https=$(env_get SKLAD_HTTPS_PORT)
 	for p in "${http:-80}" "${https:-443}"; do
-		owner=$(docker ps --format '{{.Names}} {{.Ports}}' | grep -E "[:.]$p->" | grep -v "^$CADDY " | cut -d' ' -f1 | head -n 1 || true)
+		owner=$(docker ps --format '{{.Names}} {{.Ports}}' | grep -E "[:.]${p}->" | grep -v "^$CADDY " | cut -d' ' -f1 | head -n 1 || true)
 		if [ -n "$owner" ]; then
 			warn "port $p is published by container '$owner' (stop it first; see the cut-over section)"
-		elif ! running "$CADDY" && netstat -tln 2>/dev/null | grep -Eq "[:.]$p[[:space:]]"; then
+		elif ! running "$CADDY" && netstat -tln 2>/dev/null | grep -Eq "[:.]${p}[[:space:]]"; then
 			warn "port $p is in use by a non-container service (QTS web admin?); pick another SKLAD_*_PORT"
 		else
 			echo "   port $p is free for Sklad"
