@@ -128,7 +128,7 @@ func TestMigrationsApplyOnceAndSurviveReopen(t *testing.T) {
 func TestOpenRefusesDatabaseFromNewerRelease(t *testing.T) {
 	t.Parallel()
 	store, dir := newTestStore(t, nil)
-	if _, err := store.DB().Exec(`INSERT INTO `+schemaMigrationsTable+` (version, applied_at) VALUES ('9999_from_the_future', '2026-01-01T00:00:00Z')`); err != nil {
+	if _, err := store.DB().Exec(`INSERT INTO ` + schemaMigrationsTable + ` (version, applied_at) VALUES ('9999_from_the_future', '2026-01-01T00:00:00Z')`); err != nil {
 		t.Fatalf("insert future migration: %v", err)
 	}
 	if err := store.Close(); err != nil {
