@@ -133,9 +133,11 @@ func (a *API) writeCSV(w http.ResponseWriter, items []Item) {
 	}
 }
 
-// csvRow renders one item in csvColumns order.
+// csvRow renders one item in csvColumns order. Every cell goes through
+// csvSafe: notes and names are typed by anonymous Editors, and the file is
+// opened in spreadsheet applications.
 func csvRow(item Item) []string {
-	return []string{
+	row := []string{
 		strconv.FormatInt(item.ID, 10),
 		item.AssetTag,
 		item.Name,
@@ -154,6 +156,20 @@ func csvRow(item Item) []string {
 		valueOrEmpty(item.UpdatedBy),
 		personnelIDString(item.PersonnelID), valueOrEmpty(item.PersonnelName),
 	}
+	for i, cell := range row {
+		row[i] = csvSafe(cell)
+	}
+	return row
+}
+
+// csvSafe defuses spreadsheet formula injection (CWE-1236): a cell that starts
+// with =, +, -, @, tab or CR would be evaluated as a formula by Excel or
+// LibreOffice, so it is prefixed with an apostrophe to force plain text.
+func csvSafe(cell string) string {
+	if cell != "" && strings.ContainsRune("=+-@\t\r", rune(cell[0])) {
+		return "'" + cell
+	}
+	return cell
 }
 
 // valueOrEmpty dereferences an optional string for CSV output.

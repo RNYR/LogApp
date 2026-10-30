@@ -6,6 +6,9 @@
 .env
 .env.*
 !.env.example
+!.env.test.example
+# Local working notes for Claude Code (NAS address, user names).
+CLAUDE.md
 
 # --- Runtime data, databases & backups ---------------------------------------
 data/
@@ -35,6 +38,7 @@ deploy/certs/*
 /bin/
 /dist/
 *.test
+!deploy/Caddyfile.test
 *.out
 coverage.out
 coverage.html

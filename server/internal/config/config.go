@@ -241,7 +241,7 @@ func LoadFromLookup(lookup LookupFunc) (*Config, error) {
 	}
 	cfg.AllowedOrigins = origins
 
-	trustProxy, err := parseBool(env(EnvTrustProxy, "true"))
+	trustProxy, err := parseBool(env(EnvTrustProxy, "false"))
 	if err != nil {
 		return nil, fmt.Errorf("%s: %w", EnvTrustProxy, err)
 	}

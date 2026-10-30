@@ -25,7 +25,7 @@ All optional unless marked **required**. Read at process start; changes require 
 | `SKLAD_BASE_URL`            | `https://sklad.local` | Public origin, used to build links/labels                        |
 | `SKLAD_TZ`                  | `Europe/Prague`    | IANA timezone for the scheduler & date rendering                   |
 | `SKLAD_ALLOWED_ORIGINS`     | `""`               | Comma-separated CORS origins (empty = same-origin only)            |
-| `SKLAD_TRUST_PROXY`         | `true`             | Honor `X-Forwarded-For`/`X-Real-IP` (Caddy is the proxy)           |
+| `SKLAD_TRUST_PROXY`         | `false`            | Honor `X-Forwarded-For`/`X-Real-IP`; compose sets `true` (Caddy is the only way in) |
 
 ### Network / port model (Caddy edge)
 

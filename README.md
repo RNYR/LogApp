@@ -89,8 +89,9 @@ docker compose up -d --build
 ```
 
 On first start the app seeds the admin account from `SKLAD_ADMIN_USERNAME` /
-`SKLAD_ADMIN_PASSWORD`. You are **required to change that password on first
-login**.
+`SKLAD_ADMIN_PASSWORD` (at least 12 characters; the server refuses to start
+with a published example value). You are **required to change that password on
+first login**, which also signs out every other session.
 
 ### Trusting the local CA (required for camera access)
 

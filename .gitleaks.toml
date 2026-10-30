@@ -41,7 +41,7 @@ regexes = ['''labelKey:\s*['"]labels\.[A-Za-z0-9._]+['"]''']
 description = "Documented placeholders that appear verbatim in examples and runbooks"
 regexTarget = "match"
 regexes = [
-  # .env.example ships a deliberately unusable password that must not be used.
+  # Older .env.example versions shipped this placeholder (the server now refuses it).
   '''SKLAD_ADMIN_PASSWORD=['"]?change-me-on-first-login''',
   # The test suites and runbooks use this obvious dummy webhook token.
   '''webhooks/[0-9]+/super-secret-token''',

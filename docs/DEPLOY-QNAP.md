@@ -46,8 +46,10 @@ prefixes. For a bind-mounted data directory, give the app user write permission
 
 ```sh
 # On a workstation, from the project root. Never build with --mode preview.
-docker build --platform linux/amd64 -t sklad:local .
-docker save sklad:local | gzip > sklad-image.tar.gz
+# Tag the release; set SKLAD_IMAGE_TAG to the same value in the NAS .env so the
+# previous image stays loaded for a rollback.
+docker build --platform linux/amd64 -t sklad:2.0.1 .
+docker save sklad:2.0.1 | gzip > sklad-image.tar.gz
 # Copy image archive and deployment sources to the NAS using your normal transfer method.
 ```
 

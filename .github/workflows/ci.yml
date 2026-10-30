@@ -256,6 +256,10 @@ jobs:
           targets = [v["target"] for v in app["volumes"]]
           assert "/data" in targets, targets
           assert {"sklad_data", "caddy_data", "caddy_config"} <= set(cfg["volumes"]), cfg["volumes"]
+          # Volume names are pinned: renaming the folder must not orphan the data.
+          assert cfg["name"] == "sklad", cfg.get("name")
+          assert cfg["volumes"]["sklad_data"]["name"] == "sklad_sklad_data", cfg["volumes"]
+          assert cfg["volumes"]["caddy_data"]["name"] == "sklad_caddy_data", cfg["volumes"]
 
           print("compose renders as expected; published ports:", published)
           PY

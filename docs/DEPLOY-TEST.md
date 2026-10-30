@@ -9,7 +9,7 @@ database** (only the first-boot admin) and shares nothing with the live stack:
 | Address | `https://sklad.local` (port 443, or 8443) | `https://sklad-test.local:8444` |
 | Compose file / project | `docker-compose.yml` / `sklad` | `docker-compose.test.yml` / `sklad-test` |
 | Containers | `sklad-app`, `sklad-caddy` | `sklad-test-app`, `sklad-test-caddy` |
-| Image | `sklad:local` | `sklad:test` |
+| Image | `sklad:${SKLAD_IMAGE_TAG:-local}` | `sklad:test` |
 | Volumes | `sklad_sklad_data`, `sklad_caddy_*` | `sklad_test_data`, `sklad_test_caddy_*` |
 | Config | `.env` | `.env.test` |
 | Root CA | Sklad Local Authority | Sklad **TEST** Local Authority |

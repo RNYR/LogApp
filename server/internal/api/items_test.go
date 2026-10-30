@@ -862,6 +862,33 @@ func TestExportJSONAndCSV(t *testing.T) {
 	}
 }
 
+func TestCSVExportDefusesFormulas(t *testing.T) {
+	t.Parallel()
+	personnel := "@SUM(A1:A9)"
+	row := csvRow(Item{
+		ID: 7, AssetTag: "PV-007", Name: "=HYPERLINK(\"http://x\",\"click\")", SN: "+420",
+		Note: "-2+3", PersonnelName: &personnel,
+	})
+	byColumn := make(map[string]string, len(csvColumns))
+	for i, column := range csvColumns {
+		byColumn[column] = row[i]
+	}
+	want := map[string]string{
+		"id": "7", "asset_tag": "PV-007", "name": "'=HYPERLINK(\"http://x\",\"click\")",
+		"sn": "'+420", "note": "'-2+3", "personnel_name": "'@SUM(A1:A9)",
+	}
+	for column, value := range want {
+		if byColumn[column] != value {
+			t.Errorf("%s: got %q, want %q", column, byColumn[column], value)
+		}
+	}
+	for _, cell := range []string{"\tcmd", "\rcmd"} {
+		if got := csvSafe(cell); got != "'"+cell {
+			t.Errorf("csvSafe(%q) = %q", cell, got)
+		}
+	}
+}
+
 // ---------------------------------------------------------------------------
 // RBAC, CSRF and the audit trail
 // ---------------------------------------------------------------------------

@@ -18,6 +18,10 @@
 # =============================================================================
 version: "3.8"
 
+# Pinned so the volumes below keep their names whatever the folder is called;
+# a renamed folder must not come up with an empty database and a new CA.
+name: sklad
+
 services:
   # ---------------------------------------------------------------------------
   # Application server
@@ -34,7 +38,9 @@ services:
         # Must match the owner of the data volume when using a bind mount.
         APP_UID: ${SKLAD_UID:-10001}
         APP_GID: ${SKLAD_GID:-10001}
-    image: sklad:local
+    # Tag each release (SKLAD_IMAGE_TAG=2.0.1) so the previous image stays
+    # available for a rollback; "local" is overwritten by every build.
+    image: sklad:${SKLAD_IMAGE_TAG:-local}
     container_name: sklad-app
     restart: unless-stopped
     init: true
@@ -163,10 +169,15 @@ services:
       start_period: 15s
       retries: 3
 
+# Explicit names (the ones compose derived from project "sklad" before they were
+# pinned), so existing data is picked up and the names never drift.
 volumes:
   sklad_data:
+    name: sklad_sklad_data
   caddy_data:
+    name: sklad_caddy_data
   caddy_config:
+    name: sklad_caddy_config
 
 networks:
   sklad:

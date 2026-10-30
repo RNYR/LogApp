@@ -1,0 +1,119 @@
+# =============================================================================
+# Sklad — Caddy edge for the TEST stack (https://sklad-test.local:8444)
+#
+# Identical to deploy/Caddyfile except for the internal CA's names, so devices
+# show "Sklad TEST Local Authority" and the test root can't be mistaken for the
+# live one. Used only by docker-compose.test.yml; the live stack keeps using
+# deploy/Caddyfile untouched. All addresses and ports come from the
+# environment that docker-compose.test.yml passes in. Keep the rest of this
+# file in step with deploy/Caddyfile when that one changes.
+# =============================================================================
+
+{
+	# The config is mounted read-only and applied at container start; the admin
+	# API is not needed and stays closed. Remove this line if you prefer live
+	# `caddy reload` instead of `docker compose restart caddy`.
+	admin off
+
+	# Trust is installed on the client devices, not inside this ephemeral
+	# container: skip Caddy's attempt to write to the system trust store (it
+	# only produces permission warnings here).
+	skip_install_trust
+
+	# Browsers send no SNI when you open https://<ip>:<port>. Caddy then picks
+	# a certificate by the connection's local address, which inside Docker is
+	# the container IP, not the NAS IP, so the handshake fails
+	# (ERR_SSL_PROTOCOL_ERROR). Fall back to the LAN IP certificate instead.
+	default_sni {$SKLAD_LAN_IP:127.0.0.1}
+
+	# Name the internal CA so the trust prompt on phones and laptops says what
+	# it is instead of "Caddy Local Authority". The pki block also provisions
+	# the CA at startup, which is why /ca.crt works on first boot. Requires
+	# Caddy 2.5+; changing these names later creates a new CA, so every device
+	# has to trust the new root again — set them once, before rolling out.
+	pki {
+		ca local {
+			name "Sklad TEST Local Authority"
+			root_cn "Sklad TEST Local Root CA"
+			intermediate_cn "Sklad TEST Local Intermediate CA"
+		}
+	}
+
+	# Structured logs on stdout so `docker logs sklad-test-caddy` is enough.
+	log {
+		output stdout
+		format json
+		level {$SKLAD_LOG_LEVEL:INFO}
+	}
+}
+
+# -----------------------------------------------------------------------------
+# HTTP → HTTPS. Separate blocks keep the requested host kind (name stays a name,
+# address stays an address); each target appends SKLAD_PUBLIC_PORT, which is
+# empty for the standard port 443.
+# -----------------------------------------------------------------------------
+http://{$SKLAD_HOST:sklad.local}, http://{$SKLAD_HOST_ALT:sklad} {
+	redir https://{$SKLAD_HOST:sklad.local}{$SKLAD_PUBLIC_PORT}{uri} permanent
+}
+
+http://{$SKLAD_LAN_IP:127.0.0.1} {
+	redir https://{$SKLAD_LAN_IP:127.0.0.1}{$SKLAD_PUBLIC_PORT}{uri} permanent
+}
+
+# -----------------------------------------------------------------------------
+# HTTPS
+# -----------------------------------------------------------------------------
+{$SKLAD_HOST:sklad.local}, {$SKLAD_HOST_ALT:sklad}, {$SKLAD_LAN_IP:127.0.0.1} {
+	# Internal CA: certificates are issued for exactly the addresses above,
+	# including IP SANs for SKLAD_LAN_IP. The root CA lives in the caddy data
+	# volume at /data/caddy/pki/authorities/local/root.crt.
+	tls internal
+
+	# Baseline security headers for everything Caddy answers itself (including
+	# /ca.crt and error pages). The app also sets these, plus the stricter
+	# Content-Security-Policy and Permissions-Policy that the scanner and the
+	# SPA need — those stay owned by the app so there is one source of truth.
+	header {
+		Strict-Transport-Security "max-age={$SKLAD_HSTS_MAX_AGE:31536000}; includeSubDomains"
+		X-Content-Type-Options "nosniff"
+		X-Frame-Options "DENY"
+		Referrer-Policy "no-referrer"
+		Cross-Origin-Opener-Policy "same-origin"
+		X-Robots-Tag "noindex, nofollow"
+		-Server
+	}
+
+	# Compress text responses; Caddy skips responses that are already encoded or
+	# too small to bother with.
+	encode zstd gzip
+
+	# The API speaks small JSON documents; cap request bodies at the edge.
+	request_body {
+		max_size {$SKLAD_MAX_UPLOAD:10MB}
+	}
+
+	log {
+		output stdout
+		format json
+	}
+
+	# Root CA download (the contract's GET /ca.crt). Served straight from the
+	# data volume; `inline` keeps iOS Safari's profile installation flow.
+	handle /ca.crt {
+		root * /data/caddy/pki/authorities/local
+		rewrite * /root.crt
+		header Content-Type "application/x-pem-file"
+		header Content-Disposition "inline; filename=sklad-test-root-ca.crt"
+		header Cache-Control "no-store"
+		file_server
+	}
+
+	# The app: API, health endpoints and the embedded single-page app.
+	handle {
+		reverse_proxy {$SKLAD_APP_UPSTREAM:app:8080} {
+			# Caddy sets X-Forwarded-For/-Proto/-Host automatically; the app
+			# also reads X-Real-IP when SKLAD_TRUST_PROXY is enabled.
+			header_up X-Real-IP {remote_host}
+		}
+	}
+}

@@ -352,6 +352,55 @@ func TestSessionLifecycleExpiryAndLogout(t *testing.T) {
 	}
 }
 
+func TestSeedAdminRejectsWeakOrPlaceholderPassword(t *testing.T) {
+	t.Parallel()
+	for _, password := range []string{"short-pass", "change-me-on-first-login", "CHANGE-ME-ON-FIRST-LOGIN", "            "} {
+		env := newAuthEnv(t, func(o *Options) { o.AdminPassword = password })
+		if err := env.service.SeedAdmin(context.Background()); err == nil {
+			t.Fatalf("SeedAdmin accepted %q", password)
+		}
+		var count int
+		if err := env.db.QueryRow(`SELECT COUNT(*) FROM users`).Scan(&count); err != nil {
+			t.Fatalf("count users: %v", err)
+		}
+		if count != 0 {
+			t.Fatalf("SeedAdmin with %q created %d users", password, count)
+		}
+	}
+}
+
+func TestChangePasswordRevokesOtherSessions(t *testing.T) {
+	t.Parallel()
+	env := newAuthEnv(t, nil)
+	env.seedAdmin(t)
+	ctx := context.Background()
+
+	current := env.login(t, adminUser, adminPass)
+	other := env.login(t, adminUser, adminPass)
+	if err := env.service.ChangePassword(ctx, current.User.ID, current.Token, adminPass, "brand-new-password"); err != nil {
+		t.Fatalf("ChangePassword: %v", err)
+	}
+	var remaining []string
+	rows, err := env.db.Query(`SELECT token_hash FROM sessions WHERE user_id = ?`, current.User.ID)
+	if err != nil {
+		t.Fatalf("list sessions: %v", err)
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var hash string
+		if err := rows.Scan(&hash); err != nil {
+			t.Fatalf("scan session: %v", err)
+		}
+		remaining = append(remaining, hash)
+	}
+	if len(remaining) != 1 || remaining[0] != hashToken(current.Token) {
+		t.Fatalf("only the session that changed the password may survive, got %d sessions", len(remaining))
+	}
+	if sess, _, err := env.service.GetSession(ctx, other.Token); err != nil || sess != nil {
+		t.Fatalf("the other session survived the password change (err %v)", err)
+	}
+}
+
 func TestChangePassword(t *testing.T) {
 	t.Parallel()
 	env := newAuthEnv(t, nil)
@@ -360,14 +409,14 @@ func TestChangePassword(t *testing.T) {
 
 	login := env.login(t, adminUser, adminPass)
 
-	if err := env.service.ChangePassword(ctx, login.User.ID, "wrong-current", "brand-new-password"); !errors.Is(err, ErrPasswordMismatch) {
+	if err := env.service.ChangePassword(ctx, login.User.ID, login.Token, "wrong-current", "brand-new-password"); !errors.Is(err, ErrPasswordMismatch) {
 		t.Fatalf("expected ErrPasswordMismatch, got %v", err)
 	}
-	if err := env.service.ChangePassword(ctx, 999999, adminPass, "brand-new-password"); !errors.Is(err, ErrNotFound) {
+	if err := env.service.ChangePassword(ctx, 999999, "", adminPass, "brand-new-password"); !errors.Is(err, ErrNotFound) {
 		t.Fatalf("expected ErrNotFound for an unknown user, got %v", err)
 	}
 
-	if err := env.service.ChangePassword(ctx, login.User.ID, adminPass, "brand-new-password"); err != nil {
+	if err := env.service.ChangePassword(ctx, login.User.ID, login.Token, adminPass, "brand-new-password"); err != nil {
 		t.Fatalf("ChangePassword: %v", err)
 	}
 	var mustFlag int
@@ -482,7 +531,7 @@ func TestRequireAuthRoleAndCSRF(t *testing.T) {
 	// The seeded admin is gated until the password is changed; this test is about
 	// the middleware chain, so clear that first (and exercise the flow while we
 	// are here).
-	if err := env.service.ChangePassword(ctx, admin.User.ID, adminPass, "admin-password-2"); err != nil {
+	if err := env.service.ChangePassword(ctx, admin.User.ID, admin.Token, adminPass, "admin-password-2"); err != nil {
 		t.Fatalf("ChangePassword: %v", err)
 	}
 	viewerLogin := env.login(t, adminUser, "admin-password-2")
@@ -588,7 +637,7 @@ func TestForcedPasswordChangeGate(t *testing.T) {
 	}
 
 	// After the change the gate opens.
-	if err := env.service.ChangePassword(ctx, login.User.ID, adminPass, "changed-password-1"); err != nil {
+	if err := env.service.ChangePassword(ctx, login.User.ID, login.Token, adminPass, "changed-password-1"); err != nil {
 		t.Fatalf("ChangePassword: %v", err)
 	}
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/items", nil)

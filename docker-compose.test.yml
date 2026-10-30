@@ -9,7 +9,7 @@
 #   ------------------------------   ------------------------------------
 #   project   sklad                  project   sklad-test
 #   services  app, caddy             services  test-app, test-caddy
-#   image     sklad:local            image     sklad:test
+#   image     sklad:<SKLAD_IMAGE_TAG> image     sklad:test
 #   ports     80/443 (or 8080/8443)  ports     8081/8444
 #   volumes   sklad_sklad_data, ...  volumes   sklad_test_data, sklad_test_caddy_*
 #   config    .env                   config    .env.test

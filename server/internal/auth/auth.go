@@ -415,6 +415,9 @@ func (s *Service) SeedAdmin(ctx context.Context) error {
 	if count > 0 {
 		return nil
 	}
+	if err := checkSeedPassword(s.adminPassword); err != nil {
+		return err
+	}
 	hash, err := HashPassword(s.adminPassword)
 	if err != nil {
 		return fmt.Errorf("auth: hash admin password: %w", err)
@@ -447,6 +450,25 @@ type LoginResult struct {
 	Token string // raw session token (goes into the HttpOnly cookie)
 	CSRF  string // CSRF token for the X-CSRF-Token header
 	User  *User
+}
+
+// seedPlaceholderPasswords are values that shipped in example configuration.
+// The repository is public, so seeding an Admin with one of them would hand the
+// account to whoever reaches the login page first.
+var seedPlaceholderPasswords = []string{"change-me-on-first-login", "change-me", "changeme"}
+
+// checkSeedPassword applies the same floor as offline recovery to the first-boot
+// Admin password and rejects the published placeholders.
+func checkSeedPassword(password string) error {
+	if len(password) < 12 || len(password) > 1024 || strings.TrimSpace(password) == "" {
+		return errors.New("auth: SKLAD_ADMIN_PASSWORD must be 12–1024 bytes and not blank")
+	}
+	for _, placeholder := range seedPlaceholderPasswords {
+		if strings.EqualFold(password, placeholder) {
+			return errors.New("auth: SKLAD_ADMIN_PASSWORD is the example placeholder; choose a real password")
+		}
+	}
+	return nil
 }
 
 // isWorkspaceAccount limits authenticated access to the bootstrap Admin. Legacy records remain stored but cannot establish sessions.
@@ -526,8 +548,10 @@ func (s *Service) Logout(ctx context.Context, rawToken string) error {
 }
 
 // ChangePassword updates the user's password (clearing the forced-change flag)
-// after verifying currentPassword.
-func (s *Service) ChangePassword(ctx context.Context, userID int64, currentPassword, newPassword string) error {
+// after verifying currentPassword, and signs out every other session of that
+// user. keepToken is the raw token of the session making the change; it stays
+// valid ("" revokes them all).
+func (s *Service) ChangePassword(ctx context.Context, userID int64, keepToken, currentPassword, newPassword string) error {
 	var hash string
 	err := s.db.QueryRowContext(ctx, `SELECT password_hash FROM users WHERE id = ?`, userID).Scan(&hash)
 	if err != nil {
@@ -542,7 +566,12 @@ func (s *Service) ChangePassword(ctx context.Context, userID int64, currentPassw
 		return fmt.Errorf("auth: hash new password: %w", err)
 	}
 	now := s.now().UTC().Format(time.RFC3339)
-	res, err := s.db.ExecContext(ctx,
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("auth: begin password change: %w", err)
+	}
+	defer tx.Rollback()
+	res, err := tx.ExecContext(ctx,
 		`UPDATE users SET password_hash = ?, must_change_password = 0, updated_at = ? WHERE id = ?`,
 		newHash, now, userID,
 	)
@@ -552,11 +581,20 @@ func (s *Service) ChangePassword(ctx context.Context, userID int64, currentPassw
 	if n, _ := res.RowsAffected(); n == 0 {
 		return ErrNotFound
 	}
+	revoked, err := tx.ExecContext(ctx,
+		`DELETE FROM sessions WHERE user_id = ? AND token_hash <> ?`, userID, hashToken(keepToken))
+	if err != nil {
+		return fmt.Errorf("auth: revoke other sessions: %w", err)
+	}
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("auth: commit password change: %w", err)
+	}
 	if s.audit != nil {
+		n, _ := revoked.RowsAffected()
 		_ = s.audit.Record(ctx, audit.Record{
 			Action: audit.ActionUpdate, EntityType: audit.EntityUser, EntityID: strconv.FormatInt(userID, 10),
 			ActorUserID: &userID,
-			After:       map[string]any{"password_changed": true},
+			After:       map[string]any{"password_changed": true, "sessions_revoked": n},
 		})
 	}
 	return nil
@@ -825,7 +863,7 @@ func (s *Service) handleChangePassword(w http.ResponseWriter, r *http.Request) {
 		s.http.WriteError(w, r, http.StatusBadRequest, CodeValidationFailed, "new password must be at least 8 characters")
 		return
 	}
-	if err := s.ChangePassword(r.Context(), u.ID, req.CurrentPassword, req.NewPassword); err != nil {
+	if err := s.ChangePassword(r.Context(), u.ID, sessionTokenFrom(r, s.sess), req.CurrentPassword, req.NewPassword); err != nil {
 		if errors.Is(err, ErrPasswordMismatch) {
 			s.http.WriteError(w, r, http.StatusBadRequest, CodeValidationFailed, "current password is incorrect")
 			return

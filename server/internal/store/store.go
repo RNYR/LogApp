@@ -220,6 +220,25 @@ func (s *Store) migrate(ctx context.Context) error {
 	}
 	sort.Strings(names)
 
+	// A database migrated by a newer release must not be opened by an older
+	// one (a rollback onto the upgraded volume): this binary does not know the
+	// newer schema and would silently mis-handle it. Restore the pre-upgrade
+	// backup instead.
+	known := make(map[string]struct{}, len(names))
+	for _, name := range names {
+		known[strings.TrimSuffix(name, filepath.Ext(name))] = struct{}{}
+	}
+	var unknown []string
+	for version := range applied {
+		if _, ok := known[version]; !ok {
+			unknown = append(unknown, version)
+		}
+	}
+	if len(unknown) > 0 {
+		sort.Strings(unknown)
+		return fmt.Errorf("store: database has migrations this release does not know (%s); it was written by a newer Sklad version — run that version or restore a backup taken before the upgrade", strings.Join(unknown, ", "))
+	}
+
 	for _, name := range names {
 		version := strings.TrimSuffix(name, filepath.Ext(name))
 		if _, ok := applied[version]; ok {

@@ -5,6 +5,30 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Security
+
+- The first-boot Admin password must be 12+ characters and not a published
+  example value; `.env.example` no longer ships a usable placeholder.
+- Changing a password signs out every other session of that account.
+- CSV export prefixes cells starting with `=`, `+`, `-`, `@`, tab or CR with an
+  apostrophe, so spreadsheet applications do not evaluate them as formulas.
+- `SKLAD_TRUST_PROXY` defaults to `false`; the compose files set it to `true`
+  because Caddy is the only way in.
+
+### Changed
+
+- The server refuses to open a database migrated by a newer release instead of
+  running on a schema it does not know (rollback = restore the pre-upgrade
+  backup).
+- `docker-compose.yml` pins the project name and volume names (`sklad`,
+  `sklad_sklad_data`, `sklad_caddy_*`), and tags the image
+  `sklad:${SKLAD_IMAGE_TAG:-local}` so the previous release stays available.
+- `.env.example` sets `SKLAD_HSTS_MAX_AGE=0` for the device-enrolment period.
+- `.env.test.example` and `deploy/Caddyfile.test` are now committed, so the
+  test stack works from a fresh clone.
+
 ## [2.0.1] - 2026-10-29
 
 Build and CI fixes only; the application is unchanged from 2.0.0.

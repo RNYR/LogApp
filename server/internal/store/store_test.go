@@ -125,6 +125,26 @@ func TestMigrationsApplyOnceAndSurviveReopen(t *testing.T) {
 // TestPragmasAndForeignKeys pins the SQLite configuration the rest of the
 // application relies on (WAL for concurrent reads, FKs for referential
 // integrity, a busy timeout instead of instant SQLITE_BUSY errors).
+func TestOpenRefusesDatabaseFromNewerRelease(t *testing.T) {
+	t.Parallel()
+	store, dir := newTestStore(t, nil)
+	if _, err := store.DB().Exec(`INSERT INTO `+schemaMigrationsTable+` (version, applied_at) VALUES ('9999_from_the_future', '2026-01-01T00:00:00Z')`); err != nil {
+		t.Fatalf("insert future migration: %v", err)
+	}
+	if err := store.Close(); err != nil {
+		t.Fatalf("close: %v", err)
+	}
+
+	reopened, err := Open(context.Background(), Options{DBPath: filepath.Join(dir, "sklad.db"), DataDir: dir})
+	if err == nil {
+		_ = reopened.Close()
+		t.Fatal("Open must refuse a database migrated by a newer release")
+	}
+	if !strings.Contains(err.Error(), "9999_from_the_future") {
+		t.Fatalf("the error should name the unknown migration, got %v", err)
+	}
+}
+
 func TestPragmasAndForeignKeys(t *testing.T) {
 	t.Parallel()
 	store, _ := newTestStore(t, nil)
