@@ -1,0 +1,69 @@
+#!/usr/bin/env bash
+# =============================================================================
+# scripts/make-bundle — (re)create ./sklad-release with exactly what the NAS
+# needs to build and run the LIVE stack (https://sklad.local).
+#
+#   ./scripts/make-bundle                 # tag from `git describe` (v2.0.1 → 2.0.1)
+#   ./scripts/make-bundle --tag 2.0.2     # explicit image tag
+#   ./scripts/make-bundle --allow-dirty   # bundle uncommitted changes (not for go-live)
+#   ./scripts/push-to-nas <ssh-host>      # then deploy it
+#
+# Contents: Dockerfile, .dockerignore, go.mod/go.sum, server/, web/ (without
+# node_modules, dist, test-results), docker-compose.yml, .env.example,
+# deploy/Caddyfile(.byo), deploy/certs/README.md, deploy/avahi/sklad.service,
+# scripts/sklad-stack, scripts/nas-deploy, the operator docs and a RELEASE
+# file (TAG, COMMIT). The folder is rebuilt from scratch each run; it is git-
+# and docker-ignored.
+# =============================================================================
+set -euo pipefail
+
+cd "$(dirname "$0")/.."
+OUT=sklad-release
+
+TAG=
+ALLOW_DIRTY=0
+while [ $# -gt 0 ]; do
+	case "$1" in
+		--tag) TAG=$2; shift 2 ;;
+		--allow-dirty) ALLOW_DIRTY=1; shift ;;
+		-h|--help) sed -n '3,18p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+		*) echo "unknown option $1" >&2; exit 1 ;;
+	esac
+done
+
+if [ -n "$(git status --porcelain)" ] && [ "$ALLOW_DIRTY" = 0 ]; then
+	git status --short >&2
+	echo "make-bundle: the working tree has uncommitted changes; commit them or pass --allow-dirty" >&2
+	exit 1
+fi
+COMMIT=$(git rev-parse --short HEAD)
+if [ -z "$TAG" ]; then
+	TAG=$(git describe --tags --always)
+	TAG=${TAG#v}
+fi
+[ "$ALLOW_DIRTY" = 0 ] || [ -z "$(git status --porcelain)" ] || { TAG="$TAG-dirty"; COMMIT="$COMMIT-dirty"; }
+if [[ ! "$TAG" =~ ^[A-Za-z0-9_.-]+$ ]]; then
+	echo "make-bundle: invalid tag '$TAG'" >&2
+	exit 1
+fi
+
+rm -rf "$OUT"
+mkdir -p "$OUT/deploy/avahi" "$OUT/deploy/certs" "$OUT/scripts" "$OUT/docs"
+
+cp Dockerfile .dockerignore go.mod go.sum docker-compose.yml .env.example "$OUT/"
+cp deploy/Caddyfile deploy/Caddyfile.byo "$OUT/deploy/"
+cp deploy/certs/README.md "$OUT/deploy/certs/"
+cp deploy/avahi/sklad.service "$OUT/deploy/avahi/"
+cp scripts/sklad-stack scripts/nas-deploy "$OUT/scripts/"
+cp docs/DEPLOY-QNAP.md docs/TLS-CAMERA.md docs/LABELS.md "$OUT/docs/"
+chmod +x "$OUT/scripts/sklad-stack" "$OUT/scripts/nas-deploy"
+printf 'TAG=%s\nCOMMIT=%s\n' "$TAG" "$COMMIT" >"$OUT/RELEASE"
+
+EXCLUDES=(--exclude node_modules --exclude dist --exclude test-results
+          --exclude playwright-report --exclude coverage --exclude .DS_Store)
+rsync -a "${EXCLUDES[@]}" server "$OUT/"
+rsync -a "${EXCLUDES[@]}" web "$OUT/"
+# The embed directive needs web/dist to exist in the build context.
+mkdir -p "$OUT/web/dist" && cp web/dist/.gitkeep "$OUT/web/dist/"
+
+echo "Created $OUT/ for sklad:$TAG ($COMMIT): $(find "$OUT" -type f | wc -l | tr -d ' ') files, $(du -sh "$OUT" | cut -f1)"

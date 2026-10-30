@@ -29,6 +29,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `.env.test.example` and `deploy/Caddyfile.test` are now committed, so the
   test stack works from a fresh clone.
 
+### Added
+
+- Production deployment tooling: `scripts/make-bundle` and `scripts/push-to-nas`
+  (Mac), `scripts/nas-deploy` (backup → build `sklad:<tag>` → swap → health
+  check) and `scripts/sklad-stack` (`preflight`, `backup` with the Caddy CA,
+  `restore-db`, `restore-ca`, `rollback`, `history`).
+- `docs/DEPLOY-QNAP.md` rewritten as the live runbook: first install, cut-over
+  from `equipment-log`, upgrade, rollback, scheduled and off-NAS backups,
+  restore drill.
+
 ## [2.0.1] - 2026-10-29
 
 Build and CI fixes only; the application is unchanged from 2.0.0.

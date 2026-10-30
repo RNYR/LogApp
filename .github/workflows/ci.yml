@@ -264,6 +264,10 @@ jobs:
           print("compose renders as expected; published ports:", published)
           PY
 
+      # The deploy scripts run on the NAS with no other test coverage.
+      - name: Lint the production deploy scripts (shellcheck)
+        run: shellcheck -S warning scripts/sklad-stack scripts/nas-deploy scripts/make-bundle scripts/push-to-nas
+
       - name: Validate the Avahi service file (XML)
         run: |
           sudo apt-get update -qq && sudo apt-get install -y -qq libxml2-utils

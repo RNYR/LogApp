@@ -73,6 +73,7 @@ Thumbs.db
 
 # Generated NAS bundle (scripts/make-test-bundle)
 sklad-test/
+sklad-release/
 
 # Not part of the repository
 sites/sklad-dark/

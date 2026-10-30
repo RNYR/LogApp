@@ -62,3 +62,4 @@ tmp
 
 # Generated NAS bundle (scripts/make-test-bundle)
 sklad-test
+sklad-release

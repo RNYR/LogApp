@@ -1,0 +1,54 @@
+#!/usr/bin/env bash
+# =============================================================================
+# scripts/push-to-nas — install or upgrade the LIVE Sklad stack on the NAS
+#
+#   ./scripts/push-to-nas David_Zitnik@<nas-ip>
+#   ./scripts/push-to-nas David_Zitnik@<nas-ip> --no-start
+#   ./scripts/push-to-nas David_Zitnik@<nas-ip> --rebuild    # same tag again
+#   ./scripts/push-to-nas David_Zitnik@<nas-ip> --target /share/Container/sklad
+#
+# 1. uploads ./sklad-release to a staging folder next to the target
+# 2. on the NAS (scripts/nas-deploy): backs up the running database and CA,
+#    builds sklad:<tag> while the old release keeps serving, keeps the old
+#    folder as <target>.previous, starts the new release and waits until it
+#    is healthy. Volumes are never removed.
+#
+# One SSH connection is reused, so you enter the password once. Needs ssh +
+# tar only. Run ./scripts/make-bundle first. See docs/DEPLOY-QNAP.md.
+# =============================================================================
+set -euo pipefail
+
+cd "$(dirname "$0")/.."
+
+HOST=
+TARGET=/share/Container/sklad
+DEPLOY_ARGS=()
+while [ $# -gt 0 ]; do
+	case "$1" in
+		--target) TARGET=$2; shift 2 ;;
+		--rebuild|--no-start) DEPLOY_ARGS+=("$1"); shift ;;
+		-h|--help) sed -n '3,18p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+		-*) echo "unknown option $1" >&2; exit 1 ;;
+		*) HOST=$1; shift ;;
+	esac
+done
+
+SRC=sklad-release
+[ -n "$HOST" ] || { echo "usage: $0 <user@nas-ip> [--no-start] [--rebuild] [--target DIR]" >&2; exit 1; }
+[ -f "$SRC/RELEASE" ] || { echo "$SRC/ not found: run ./scripts/make-bundle first" >&2; exit 1; }
+case "$TARGET" in */) TARGET=${TARGET%/} ;; esac
+case "$TARGET" in *sklad-test*) echo "that is the test folder; use ./scripts/push-test-to-nas" >&2; exit 1 ;; esac
+INCOMING="$(dirname "$TARGET")/.$(basename "$TARGET")-incoming"
+
+# Reuse one authenticated connection for all steps.
+CTL="$HOME/.ssh/sklad-push-%r@%h:%p"
+mkdir -p "$HOME/.ssh"
+SSH=(ssh -o ControlMaster=auto -o "ControlPath=$CTL" -o ControlPersist=120)
+trap '"${SSH[@]}" -O exit "$HOST" >/dev/null 2>&1 || true' EXIT
+
+echo "== Uploading $SRC/ ($(tr '\n' ' ' <"$SRC/RELEASE")) to $HOST:$INCOMING"
+COPYFILE_DISABLE=1 tar -czf - -C "$SRC" . \
+	| "${SSH[@]}" "$HOST" "rm -rf '$INCOMING' && mkdir -p '$INCOMING' && tar -xzf - -C '$INCOMING'"
+
+echo "== Deploying to $TARGET"
+"${SSH[@]}" -t "$HOST" "sh '$INCOMING/scripts/nas-deploy' --incoming '$INCOMING' --target '$TARGET' ${DEPLOY_ARGS[*]:-}"

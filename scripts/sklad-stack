@@ -1,0 +1,257 @@
+#!/usr/bin/env sh
+# =============================================================================
+# scripts/sklad-stack — operate the LIVE Sklad stack on the NAS
+#
+# Always uses project "sklad", docker-compose.yml and .env from this folder.
+# Nothing here deletes the data or CA volumes. Run it from the project folder
+# (or anywhere: it cd's there itself). See docs/DEPLOY-QNAP.md.
+#
+#   ./scripts/sklad-stack preflight       check .env, image and free ports
+#   ./scripts/sklad-stack up              start from the image in SKLAD_IMAGE_TAG
+#   ./scripts/sklad-stack ps              container health
+#   ./scripts/sklad-stack logs            follow app + caddy logs
+#   ./scripts/sklad-stack restart         restart both containers
+#   ./scripts/sklad-stack down            stop and remove the containers
+#                                         (data, CA and images are kept)
+#   ./scripts/sklad-stack backup [DIR]    database + CA copy into DIR/<time>/
+#                                         (default /share/Backup/sklad)
+#   ./scripts/sklad-stack restore-db FILE replace the database with a backup
+#   ./scripts/sklad-stack restore-ca FILE replace the Caddy CA with a backup
+#   ./scripts/sklad-stack rollback        go back to the previous release
+#   ./scripts/sklad-stack history         deployments made by nas-deploy
+#   ./scripts/sklad-stack images          sklad:* images on this NAS
+#   ./scripts/sklad-stack config          print the resolved compose config
+#   ./scripts/sklad-stack compose ...     any other docker compose subcommand
+# =============================================================================
+set -eu
+
+cd "$(dirname "$0")/.."
+HERE=$(pwd)
+
+PROJECT=sklad
+FILE=docker-compose.yml
+ENVFILE=.env
+APP=sklad-app
+CADDY=sklad-caddy
+DATA_VOLUME=sklad_sklad_data
+CA_VOLUME=sklad_caddy_data
+HISTORY="$(dirname "$HERE")/.sklad-deploy-history"
+BACKUP_KEEP=${SKLAD_BACKUP_KEEP:-30}
+
+# Docker / compose locations on QNAP Container Station (non-login SSH shells
+# do not always have them on PATH).
+PATH=/share/Container/bin:/share/CACHEDEV1_DATA/.qpkg/container-station/bin:$PATH
+export PATH
+
+die() { echo "sklad-stack: $*" >&2; exit 1; }
+note() { echo "== $*"; }
+
+[ -f "$FILE" ] || die "$FILE not found (run from the Sklad project folder)"
+case "$HERE" in
+	*sklad-test*) die "this is the TEST folder; use ./scripts/test-stack here" ;;
+esac
+command -v docker >/dev/null 2>&1 || die "docker not found"
+docker compose version >/dev/null 2>&1 || die "'docker compose' is not available (export PATH=/share/Container/bin:\$PATH)"
+
+compose() { docker compose -p "$PROJECT" -f "$FILE" "$@"; }
+
+# env_get KEY [FILE] — last value of KEY in an env file, without quotes.
+env_get() {
+	sed -n "s/^$1=//p" "${2:-$ENVFILE}" 2>/dev/null | tail -n 1 | tr -d '"'"'"'\r'
+}
+
+confirm() {
+	printf 'Type "%s" to continue: ' "$1"
+	read -r answer
+	[ "$answer" = "$1" ] || die "aborted"
+}
+
+image_tag() {
+	tag=$(env_get SKLAD_IMAGE_TAG)
+	echo "${tag:-local}"
+}
+
+running() { [ "$(docker inspect -f '{{.State.Running}}' "$1" 2>/dev/null || true)" = true ]; }
+
+# wait_healthy — wait up to ~3 minutes for both containers to report healthy.
+# Fails early when a container is marked unhealthy or keeps restarting.
+wait_healthy() {
+	i=0
+	while [ $i -lt 36 ]; do
+		a=$(docker inspect -f '{{if .State.Health}}{{.State.Health.Status}}{{else}}none{{end}}' "$APP" 2>/dev/null || echo missing)
+		c=$(docker inspect -f '{{if .State.Health}}{{.State.Health.Status}}{{else}}none{{end}}' "$CADDY" 2>/dev/null || echo missing)
+		r=$(docker inspect -f '{{.RestartCount}}' "$APP" 2>/dev/null || echo 0)
+		if [ "$a" = healthy ] && [ "$c" = healthy ]; then
+			note "healthy: $APP and $CADDY"
+			return 0
+		fi
+		if [ "$a" = unhealthy ] || [ "$c" = unhealthy ] || [ "$r" -gt 0 ]; then
+			break
+		fi
+		i=$((i + 1))
+		sleep 5
+	done
+	echo "sklad-stack: not healthy (app=$a caddy=$c, app restarts=$r). Last app log lines:" >&2
+	docker logs --tail 30 "$APP" >&2 2>&1 || true
+	return 1
+}
+
+preflight() {
+	ok=1
+	warn() { echo "   ! $*"; ok=0; }
+	note "Checking $HERE"
+	[ -f "$ENVFILE" ] || die "$ENVFILE missing: cp .env.example $ENVFILE && chmod 600 $ENVFILE, then fill it in"
+	pw=$(env_get SKLAD_ADMIN_PASSWORD)
+	[ ${#pw} -ge 12 ] || warn "SKLAD_ADMIN_PASSWORD must be at least 12 characters (only used to seed a new database)"
+	[ -n "$(env_get SKLAD_LAN_IP)" ] || warn "SKLAD_LAN_IP is empty (HTTPS by IP and default_sni need it)"
+	tag=$(image_tag)
+	if docker image inspect "sklad:$tag" >/dev/null 2>&1; then
+		echo "   image sklad:$tag is loaded"
+	else
+		warn "image sklad:$tag is not built yet (deploy with scripts/push-to-nas, or set SKLAD_IMAGE_TAG)"
+	fi
+	hsts=$(env_get SKLAD_HSTS_MAX_AGE)
+	[ "${hsts:-31536000}" = 0 ] || echo "   note: SKLAD_HSTS_MAX_AGE=${hsts:-31536000}; keep 0 until every device trusts the CA"
+	http=$(env_get SKLAD_HTTP_PORT); https=$(env_get SKLAD_HTTPS_PORT)
+	for p in "${http:-80}" "${https:-443}"; do
+		owner=$(docker ps --format '{{.Names}} {{.Ports}}' | grep -E "[:.]$p->" | grep -v "^$CADDY " | cut -d' ' -f1 | head -n 1 || true)
+		if [ -n "$owner" ]; then
+			warn "port $p is published by container '$owner' (stop it first; see the cut-over section)"
+		elif ! running "$CADDY" && netstat -tln 2>/dev/null | grep -Eq "[:.]$p[[:space:]]"; then
+			warn "port $p is in use by a non-container service (QTS web admin?); pick another SKLAD_*_PORT"
+		else
+			echo "   port $p is free for Sklad"
+		fi
+	done
+	for v in "$DATA_VOLUME" "$CA_VOLUME"; do
+		if docker volume inspect "$v" >/dev/null 2>&1; then
+			echo "   volume $v exists (existing data/CA will be used)"
+		else
+			echo "   volume $v does not exist yet (created empty on first start)"
+		fi
+	done
+	[ $ok = 1 ] && note "preflight OK" || die "preflight found problems (see above)"
+}
+
+backup() {
+	root=${1:-/share/Backup/sklad}
+	running "$APP" || die "$APP is not running; start it first (the backup is taken by the server binary)"
+	ts=$(date -u +%Y%m%dT%H%M%SZ)
+	out="$root/$ts"
+	mkdir -p "$out"
+	chmod 700 "$root" "$out"
+	path=$(docker exec "$APP" /usr/local/bin/sklad backup) || die "database backup failed"
+	docker cp "$APP:$path" "$out/sklad.db" || die "copying $path out of $APP failed"
+	if running "$CADDY"; then
+		docker exec "$CADDY" tar -czf - -C /data/caddy pki >"$out/caddy-pki.tar.gz" || die "CA backup failed"
+	else
+		echo "   ! $CADDY is not running: CA not backed up"
+	fi
+	printf 'image=sklad:%s\nsource=%s\n' "$(image_tag)" "$path" >"$out/INFO"
+	chmod 600 "$out"/*
+	echo "$out"
+	# Keep the newest $BACKUP_KEEP backup folders in $root.
+	ls -1d "$root"/[0-9]*T[0-9]*Z 2>/dev/null | sort -r | awk -v keep="$BACKUP_KEEP" 'NR > keep' |
+		while read -r old; do rm -rf "$old"; done
+}
+
+restore_db() {
+	src=${1:-}
+	[ -n "$src" ] && [ -f "$src" ] || die "usage: restore-db <backup>/sklad.db"
+	tag=$(image_tag)
+	docker image inspect "sklad:$tag" >/dev/null 2>&1 || die "image sklad:$tag not found"
+	echo "This REPLACES the live database with $src."
+	echo "The current files are kept in the volume under /data/pre-restore-<time>/."
+	confirm restore
+	compose stop app
+	ts=$(date -u +%Y%m%dT%H%M%SZ)
+	docker run --rm -i --entrypoint sh -v "$DATA_VOLUME:/data" "sklad:$tag" -c "
+		set -e
+		keep=/data/pre-restore-$ts
+		mkdir -p \"\$keep\"
+		for f in sklad.db sklad.db-wal sklad.db-shm; do
+			[ ! -e /data/\$f ] || mv /data/\$f \"\$keep/\"
+		done
+		cat > /data/sklad.db.restoring
+		mv /data/sklad.db.restoring /data/sklad.db
+		chmod 600 /data/sklad.db
+	" <"$src"
+	compose start app
+	wait_healthy
+	note "database restored from $src"
+}
+
+restore_ca() {
+	src=${1:-}
+	[ -n "$src" ] && [ -f "$src" ] || die "usage: restore-ca <backup>/caddy-pki.tar.gz"
+	echo "This REPLACES the Caddy CA with $src (devices must already trust that CA)."
+	confirm restore
+	compose stop caddy
+	ts=$(date -u +%Y%m%dT%H%M%SZ)
+	docker run --rm -i -v "$CA_VOLUME:/data" caddy:2-alpine sh -c "
+		set -e
+		mkdir -p /data/caddy
+		[ ! -e /data/caddy/pki ] || mv /data/caddy/pki /data/caddy/pki.before-restore-$ts
+		tar -xzf - -C /data/caddy
+	" <"$src"
+	compose start caddy
+	wait_healthy
+	note "CA restored from $src"
+}
+
+rollback() {
+	prev="$HERE.previous"
+	[ -d "$prev" ] || die "no previous release folder ($prev); see docs/DEPLOY-QNAP.md §6 for a manual rollback"
+	prevtag=$(env_get SKLAD_IMAGE_TAG "$prev/.env")
+	prevtag=${prevtag:-local}
+	docker image inspect "sklad:$prevtag" >/dev/null 2>&1 || die "previous image sklad:$prevtag is no longer loaded"
+	echo "Rolling back from sklad:$(image_tag) to sklad:$prevtag ($prev)."
+	echo "The previous folder's .env comes back with it."
+	confirm rollback
+	ts=$(date -u +%Y%m%dT%H%M%SZ)
+	mv "$HERE" "$HERE.rolledback-$ts"
+	mv "$prev" "$HERE"
+	cd "$HERE"
+	compose up -d --no-build
+	printf '%s rollback to=%s from=%s\n' "$ts" "$prevtag" "$HERE.rolledback-$ts" >>"$HISTORY"
+	if wait_healthy; then
+		note "rolled back to sklad:$prevtag"
+		return 0
+	fi
+	cat >&2 <<HELP
+If the log says the database "was written by a newer Sklad version", the
+release you rolled back from changed the schema. Restore the backup that
+nas-deploy took before that deployment (see ./scripts/sklad-stack history):
+   ./scripts/sklad-stack restore-db /share/Backup/sklad/<pre-deploy time>/sklad.db
+HELP
+	exit 1
+}
+
+cmd=${1:-}
+[ $# -gt 0 ] && shift
+
+case "$cmd" in
+	preflight)   preflight ;;
+	up)          [ -f "$ENVFILE" ] || die "$ENVFILE missing"; compose up -d --no-build "$@"; wait_healthy ;;
+	ps)          compose ps "$@" ;;
+	logs)        compose logs -f --tail=100 "$@" ;;
+	restart)     compose restart "$@"; wait_healthy ;;
+	down)
+		for a in "$@"; do
+			case "$a" in -v|--volumes) die "refusing to delete the live volumes; remove them by hand if you really mean it" ;; esac
+		done
+		compose down "$@"
+		;;
+	backup)      backup "$@" ;;
+	restore-db)  restore_db "$@" ;;
+	restore-ca)  restore_ca "$@" ;;
+	rollback)    rollback ;;
+	history)     [ -f "$HISTORY" ] && cat "$HISTORY" || echo "no deployments recorded yet" ;;
+	images)      docker image ls sklad ;;
+	config)      compose config "$@" ;;
+	compose)     compose "$@" ;;
+	*)
+		sed -n '4,25p' "$0" | sed 's/^# \{0,1\}//'
+		[ -z "$cmd" ] || exit 1
+		;;
+esac

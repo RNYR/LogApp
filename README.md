@@ -141,7 +141,7 @@ sklad/
 ├── docs/                   # contracts + deployment/TLS/label runbooks
 │   └── contracts/          # schema.md, barcode.md, config.md (frozen)
 ├── deploy/                 # Caddyfile, avahi service, cert docs
-├── scripts/                # cert helpers (make-certs)
+├── scripts/                # NAS deploy (make-bundle, push-to-nas, sklad-stack), test stack, certs
 ├── equipment-log/          # legacy reference implementation (nested module)
 ├── Dockerfile
 ├── docker-compose.yml
@@ -199,8 +199,9 @@ go run ./server/cmd/import-json \
 
 **Runbooks**
 
-- [docs/DEPLOY-QNAP.md](docs/DEPLOY-QNAP.md) — install on a QNAP NAS (Container
-  Station, SSH compose, port conflicts, backups, upgrades)
+- [docs/DEPLOY-QNAP.md](docs/DEPLOY-QNAP.md) — live stack on a QNAP NAS: first
+  install, cut-over from `equipment-log`, upgrades and rollback
+  (`scripts/make-bundle`, `push-to-nas`, `sklad-stack`), backups and restore
 - [docs/TLS-CAMERA.md](docs/TLS-CAMERA.md) — root CA trust per platform and
   camera troubleshooting (HTTPS is required for scanning)
 - [docs/LABELS.md](docs/LABELS.md) — CODE128 labels and the Brother P-Touch E300

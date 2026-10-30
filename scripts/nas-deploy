@@ -1,0 +1,172 @@
+#!/bin/sh
+# =============================================================================
+# scripts/nas-deploy — runs ON THE NAS (called by scripts/push-to-nas)
+#
+# Installs or upgrades the LIVE Sklad stack from a freshly uploaded bundle,
+# never touching the data or CA volumes:
+#
+#   1. backs up the running database and CA to /share/Backup/sklad/<time>/
+#      (aborts the deployment when that fails)
+#   2. builds image sklad:<tag> from the bundle while the old release keeps
+#      serving (a failed build changes nothing)
+#   3. moves the current folder to <target>.previous (kept for rollback) and
+#      puts the bundle in its place, carrying over .env and deploy/certs/
+#   4. sets SKLAD_IMAGE_TAG=<tag> in .env, recreates the containers and waits
+#      until both report healthy
+#
+# First install (no .env in the target yet): steps 2–4 stop after copying the
+# files and print what to configure; see docs/DEPLOY-QNAP.md.
+#
+#   sh nas-deploy --incoming DIR --target DIR [--tag TAG] [--rebuild] [--no-start]
+# =============================================================================
+set -eu
+
+INCOMING=
+TARGET=
+TAG=
+REBUILD=0
+START=1
+BACKUP_ROOT=${SKLAD_BACKUP_DIR:-/share/Backup/sklad}
+while [ $# -gt 0 ]; do
+	case "$1" in
+		--incoming) INCOMING=$2; shift 2 ;;
+		--target)   TARGET=$2; shift 2 ;;
+		--tag)      TAG=$2; shift 2 ;;
+		--rebuild)  REBUILD=1; shift ;;
+		--no-start) START=0; shift ;;
+		*) echo "nas-deploy: unknown option $1" >&2; exit 1 ;;
+	esac
+done
+
+die() { echo "nas-deploy: $*" >&2; exit 1; }
+note() { echo "== $*"; }
+
+[ -n "$INCOMING" ] && [ -d "$INCOMING" ] || die "--incoming folder missing"
+[ -n "$TARGET" ] || die "--target missing"
+case "$TARGET" in
+	*sklad-test*) die "refusing target '$TARGET': that is the test stack (use push-test-to-nas)" ;;
+	/*sklad*) ;;
+	*) die "refusing target '$TARGET': must be an absolute path containing 'sklad'" ;;
+esac
+[ -f "$INCOMING/docker-compose.yml" ] || die "$INCOMING is not a release bundle"
+
+if [ -z "$TAG" ] && [ -f "$INCOMING/RELEASE" ]; then
+	TAG=$(sed -n 's/^TAG=//p' "$INCOMING/RELEASE")
+fi
+COMMIT=$(sed -n 's/^COMMIT=//p' "$INCOMING/RELEASE" 2>/dev/null || true)
+[ -n "$TAG" ] || die "no --tag given and no TAG in RELEASE"
+case "$TAG" in
+	*[!A-Za-z0-9_.-]*) die "invalid tag '$TAG' (letters, digits, . _ - only)" ;;
+	local|test) die "tag '$TAG' is reserved; use a release number" ;;
+esac
+
+PATH=/share/Container/bin:/share/CACHEDEV1_DATA/.qpkg/container-station/bin:$PATH
+export PATH
+command -v docker >/dev/null 2>&1 || die "docker not found"
+docker compose version >/dev/null 2>&1 || die "'docker compose' is not available"
+
+PREVIOUS="$TARGET.previous"
+HISTORY="$(dirname "$TARGET")/.sklad-deploy-history"
+
+# env_set KEY VALUE FILE — replace or append KEY=VALUE.
+env_set() {
+	if grep -q "^$1=" "$3"; then
+		sed -i "s|^$1=.*|$1=$2|" "$3"
+	else
+		printf '%s=%s\n' "$1" "$2" >>"$3"
+	fi
+}
+
+carry_over() {
+	# $1 = old folder, $2 = new folder
+	cp "$1/.env" "$2/.env"
+	chmod 600 "$2/.env"
+	if [ -d "$1/deploy/certs" ]; then
+		for f in "$1"/deploy/certs/*; do
+			[ -e "$f" ] || continue
+			[ "$(basename "$f")" = README.md ] && continue
+			cp -p "$f" "$2/deploy/certs/"
+		done
+	fi
+}
+
+chmod +x "$INCOMING/scripts/sklad-stack" "$INCOMING/scripts/nas-deploy"
+
+# --- First install -----------------------------------------------------------
+if [ ! -f "$TARGET/.env" ]; then
+	[ ! -e "$TARGET" ] || [ -z "$(ls -A "$TARGET" 2>/dev/null)" ] ||
+		die "$TARGET exists without .env; move it away or add its .env first"
+	rm -rf "$TARGET"
+	mv "$INCOMING" "$TARGET"
+	cat <<NEXT
+== First install: files are in $TARGET. Configure, build and start:
+   cd $TARGET
+   cp .env.example .env && chmod 600 .env
+   vi .env            # SKLAD_ADMIN_PASSWORD, SKLAD_LAN_IP, ports, SKLAD_IMAGE_TAG=$TAG
+   export PATH=/share/Container/bin:\$PATH
+   SKLAD_VERSION=$TAG SKLAD_COMMIT=$COMMIT docker compose build app
+   ./scripts/sklad-stack preflight
+   ./scripts/sklad-stack up
+NEXT
+	exit 0
+fi
+
+# --- Upgrade -----------------------------------------------------------------
+OLDTAG=$(sed -n 's/^SKLAD_IMAGE_TAG=//p' "$TARGET/.env" | tail -n 1 | tr -d '"'"'"'\r')
+OLDTAG=${OLDTAG:-local}
+note "Deploying sklad:$TAG over sklad:$OLDTAG in $TARGET"
+if docker image inspect "sklad:$TAG" >/dev/null 2>&1 && [ "$REBUILD" = 0 ]; then
+	die "image sklad:$TAG already exists; use a new tag, or --rebuild to overwrite it (loses that image as a rollback point)"
+fi
+
+# The bundle gets the live .env first, so its own sklad-stack can take the
+# backup even when the installed release predates that script.
+carry_over "$TARGET" "$INCOMING"
+
+BACKUP=none
+if [ "$(docker inspect -f '{{.State.Running}}' sklad-app 2>/dev/null || true)" = true ]; then
+	note "1/4 Backing up the running database and CA"
+	out=$("$INCOMING/scripts/sklad-stack" backup "$BACKUP_ROOT") ||
+		die "pre-deploy backup failed; nothing was changed"
+	BACKUP=$(printf '%s\n' "$out" | tail -n 1)
+	echo "   $BACKUP"
+else
+	note "1/4 sklad-app is not running: no pre-deploy backup taken"
+fi
+
+note "2/4 Building sklad:$TAG (the running release keeps serving; 10–30 min on the NAS)"
+(
+	cd "$INCOMING"
+	SKLAD_IMAGE_TAG=$TAG SKLAD_VERSION=$TAG SKLAD_COMMIT=${COMMIT:-none} \
+		SKLAD_BUILD_TIME=$(date -u +%Y-%m-%dT%H:%M:%SZ) \
+		docker compose -p sklad -f docker-compose.yml build app
+) || die "build failed; the running release and $TARGET are unchanged"
+
+note "3/4 Switching folders ($TARGET.previous keeps the old release)"
+rm -rf "$PREVIOUS"
+mv "$TARGET" "$PREVIOUS"
+mv "$INCOMING" "$TARGET"
+env_set SKLAD_IMAGE_TAG "$TAG" "$TARGET/.env"
+TS=$(date -u +%Y%m%dT%H%M%SZ)
+printf '%s deploy tag=%s commit=%s previous=%s backup=%s\n' \
+	"$TS" "$TAG" "${COMMIT:-none}" "$OLDTAG" "$BACKUP" >>"$HISTORY"
+
+if [ "$START" = 0 ]; then
+	note "Not starting (--no-start). Run: cd $TARGET && ./scripts/sklad-stack up"
+	exit 0
+fi
+
+note "4/4 Starting sklad:$TAG"
+cd "$TARGET"
+if ./scripts/sklad-stack up; then
+	note "Deployed sklad:$TAG. Rollback if needed: cd $TARGET && ./scripts/sklad-stack rollback"
+else
+	cat >&2 <<HELP
+nas-deploy: sklad:$TAG did not become healthy. Inspect with
+   cd $TARGET && ./scripts/sklad-stack logs
+and go back to sklad:$OLDTAG with
+   ./scripts/sklad-stack rollback
+Pre-deploy backup: $BACKUP
+HELP
+	exit 1
+fi

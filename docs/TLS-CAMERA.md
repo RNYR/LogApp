@@ -167,7 +167,7 @@ Extra checks:
 * **`sklad.local` vs the IP.** Both can work, but only if the certificate covers
   the one you use (`SKLAD_HOST`/`SKLAD_LAN_IP`, §1).
 * **Android and `.local`.** Android's mDNS support is patchy — if the name does
-  not resolve, use the IP address or a router DNS entry ([`DEPLOY-QNAP.md`](DEPLOY-QNAP.md) §9).
+  not resolve, use the IP address or a router DNS entry ([`DEPLOY-QNAP.md`](DEPLOY-QNAP.md) §4).
 * **HSTS.** While installing trust across a fleet, `SKLAD_HSTS_MAX_AGE=0` in
   `.env` keeps a typo from being pinned by browsers for a year; set it back to
   `31536000` afterwards.
