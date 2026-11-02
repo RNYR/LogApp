@@ -63,7 +63,14 @@ esac
 PATH=/share/Container/bin:/share/CACHEDEV1_DATA/.qpkg/container-station/bin:$PATH
 export PATH
 command -v docker >/dev/null 2>&1 || die "docker not found"
-docker compose version >/dev/null 2>&1 || die "'docker compose' is not available"
+# QNAP ships the standalone `docker-compose`; elsewhere it is a docker plugin.
+if docker compose version >/dev/null 2>&1; then
+	compose() { docker compose "$@"; }
+elif command -v docker-compose >/dev/null 2>&1; then
+	compose() { docker-compose "$@"; }
+else
+	die "neither 'docker compose' nor 'docker-compose' found"
+fi
 
 PREVIOUS="$TARGET.previous"
 HISTORY="$(dirname "$TARGET")/.sklad-deploy-history"
@@ -103,10 +110,8 @@ if [ ! -f "$TARGET/.env" ]; then
    cd $TARGET
    cp .env.example .env && chmod 600 .env
    vi .env            # SKLAD_ADMIN_PASSWORD, SKLAD_LAN_IP, ports, SKLAD_IMAGE_TAG=$TAG
-   export PATH=/share/Container/bin:\$PATH
-   SKLAD_VERSION=$TAG SKLAD_COMMIT=$COMMIT docker compose build app
-   ./scripts/sklad-stack preflight
-   ./scripts/sklad-stack up
+   ./scripts/sklad-stack build
+   Then follow docs/CUTOVER.md (./scripts/nas-cutover status).
 NEXT
 	exit 0
 fi
@@ -139,7 +144,7 @@ note "2/4 Building sklad:$TAG (the running release keeps serving; 10–30 min on
 	cd "$INCOMING"
 	SKLAD_IMAGE_TAG=$TAG SKLAD_VERSION=$TAG SKLAD_COMMIT=${COMMIT:-none} \
 		SKLAD_BUILD_TIME=$(date -u +%Y-%m-%dT%H:%M:%SZ) \
-		docker compose -p sklad -f docker-compose.yml build app
+		compose -p sklad -f docker-compose.yml build app
 ) || die "build failed; the running release and $TARGET are unchanged"
 
 note "3/4 Switching folders ($TARGET.previous keeps the old release)"

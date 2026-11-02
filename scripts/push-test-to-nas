@@ -47,7 +47,7 @@ SSH=(ssh -o ControlMaster=auto -o "ControlPath=$CTL" -o ControlPersist=120)
 trap '"${SSH[@]}" -O exit "$HOST" >/dev/null 2>&1 || true' EXIT
 
 echo "== Uploading $SRC/ to $HOST:$INCOMING"
-COPYFILE_DISABLE=1 tar -czf - -C "$SRC" . \
+COPYFILE_DISABLE=1 tar --no-xattrs --no-mac-metadata -czf - -C "$SRC" . \
 	| "${SSH[@]}" "$HOST" "rm -rf '$INCOMING' && mkdir -p '$INCOMING' && tar -xzf - -C '$INCOMING'"
 
 echo "== Replacing the test stack at $TARGET"

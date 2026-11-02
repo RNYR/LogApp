@@ -6,6 +6,7 @@
 # Nothing here deletes the data or CA volumes. Run it from the project folder
 # (or anywhere: it cd's there itself). See docs/DEPLOY-QNAP.md.
 #
+#   ./scripts/sklad-stack build [--rebuild] build sklad:<SKLAD_IMAGE_TAG> from this folder
 #   ./scripts/sklad-stack preflight       check .env, image and free ports
 #   ./scripts/sklad-stack up              start from the image in SKLAD_IMAGE_TAG
 #   ./scripts/sklad-stack ps              container health
@@ -51,9 +52,15 @@ case "$HERE" in
 	*sklad-test*) die "this is the TEST folder; use ./scripts/test-stack here" ;;
 esac
 command -v docker >/dev/null 2>&1 || die "docker not found"
-docker compose version >/dev/null 2>&1 || die "'docker compose' is not available (export PATH=/share/Container/bin:\$PATH)"
-
-compose() { docker compose -p "$PROJECT" -f "$FILE" "$@"; }
+# QNAP Container Station ships Compose as the standalone `docker-compose`
+# (v2); newer Docker installs have the `docker compose` plugin. Accept both.
+if docker compose version >/dev/null 2>&1; then
+	compose() { docker compose -p "$PROJECT" -f "$FILE" "$@"; }
+elif command -v docker-compose >/dev/null 2>&1; then
+	compose() { docker-compose -p "$PROJECT" -f "$FILE" "$@"; }
+else
+	die "neither 'docker compose' nor 'docker-compose' found (export PATH=/share/Container/bin:\$PATH)"
+fi
 
 # env_get KEY [FILE] — last value of KEY in an env file, without quotes.
 env_get() {
@@ -94,6 +101,20 @@ wait_healthy() {
 	echo "sklad-stack: not healthy (app=$a caddy=$c, app restarts=$r). Last app log lines:" >&2
 	docker logs --tail 30 "$APP" >&2 2>&1 || true
 	return 1
+}
+
+build() {
+	[ -f "$ENVFILE" ] || die "$ENVFILE missing: cp .env.example $ENVFILE && chmod 600 $ENVFILE, then fill it in"
+	tag=$(image_tag)
+	[ "$tag" != local ] || die "set SKLAD_IMAGE_TAG in $ENVFILE to the release (e.g. the TAG in ./RELEASE)"
+	if docker image inspect "sklad:$tag" >/dev/null 2>&1 && [ "${1:-}" != --rebuild ]; then
+		die "image sklad:$tag already exists (--rebuild overwrites it)"
+	fi
+	commit=$(sed -n 's/^COMMIT=//p' RELEASE 2>/dev/null || true)
+	note "Building sklad:$tag (10–30 min on the NAS; anything running keeps running)"
+	SKLAD_IMAGE_TAG=$tag SKLAD_VERSION=$tag SKLAD_COMMIT=${commit:-none} SKLAD_BUILD_TIME=$(date -u +%Y-%m-%dT%H:%M:%SZ) \
+		compose build app
+	note "Built sklad:$tag"
 }
 
 preflight() {
@@ -231,6 +252,7 @@ cmd=${1:-}
 [ $# -gt 0 ] && shift
 
 case "$cmd" in
+	build)       build "$@" ;;
 	preflight)   preflight ;;
 	up)          [ -f "$ENVFILE" ] || die "$ENVFILE missing"; compose up -d --no-build "$@"; wait_healthy ;;
 	ps)          compose ps "$@" ;;
@@ -251,7 +273,7 @@ case "$cmd" in
 	config)      compose config "$@" ;;
 	compose)     compose "$@" ;;
 	*)
-		sed -n '4,25p' "$0" | sed 's/^# \{0,1\}//'
+		sed -n '4,26p' "$0" | sed 's/^# \{0,1\}//'
 		[ -z "$cmd" ] || exit 1
 		;;
 esac

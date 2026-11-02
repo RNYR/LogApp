@@ -33,7 +33,8 @@ over the current image tag and lose the rollback point. Use the scripts.
 
 Confirm the NAS architecture (`uname -m` → `x86_64` = linux/amd64), memory, free
 disk (a build needs ~2 GB temporarily) and which ports are taken. On QNAP,
-`docker compose` is not on the SSH `PATH`; in every NAS shell:
+Compose is the standalone `docker-compose` (not the `docker compose` plugin)
+and is not on the SSH `PATH`; in every NAS shell:
 
 ```sh
 export PATH=/share/Container/bin:$PATH
@@ -46,7 +47,7 @@ permitted rental updates without login.
 ## 2. First install
 
 From the Mac, on a clean, committed checkout of the release (tag it first, e.g.
-`v2.0.2`; `make-bundle` refuses uncommitted changes):
+`v2.0.3`; `make-bundle` refuses uncommitted changes):
 
 ```sh
 ./scripts/make-bundle                         # writes ./sklad-release, tag from git describe
@@ -70,7 +71,7 @@ Set at least:
 - `SKLAD_LAN_IP` — the NAS address (certificate SAN and `default_sni`).
 - `SKLAD_HOST` / `SKLAD_HOST_ALT` — the names devices will use (default
   `sklad.local` / `sklad`).
-- `SKLAD_IMAGE_TAG` — the tag the push printed (e.g. `2.0.2`).
+- `SKLAD_IMAGE_TAG` — the tag the push printed (e.g. `2.0.3`).
 - `SKLAD_HSTS_MAX_AGE=0` until every device trusts the CA (the default in
   `.env.example`).
 - Ports: `80`/`443` by default. If QTS itself owns 443, use for example
@@ -84,7 +85,7 @@ Build the image once (10–30 min; the legacy app keeps running meanwhile) and
 check the setup:
 
 ```sh
-SKLAD_VERSION=<tag> docker compose build app    # tags sklad:$SKLAD_IMAGE_TAG from .env
+./scripts/sklad-stack build                     # tags sklad:$SKLAD_IMAGE_TAG from .env
 ./scripts/sklad-stack preflight
 ```
 

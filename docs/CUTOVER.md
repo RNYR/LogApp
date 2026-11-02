@@ -9,7 +9,7 @@ Background and the commands behind each step: [DEPLOY-QNAP.md](DEPLOY-QNAP.md).
 The Sklad test stack (`sklad-test`) is not touched by any step here.
 
 Placeholders: `<nas-ip>` = the NAS address, `<user>` = your NAS SSH account,
-`<tag>` = the release, e.g. `2.0.2`.
+`<tag>` = the release, e.g. `2.0.3`.
 
 ## 1. Before the day
 
@@ -56,7 +56,7 @@ In `.env` set:
 Build the image (10–30 minutes) and look at what the cut-over will find:
 
 ```sh
-SKLAD_VERSION=<tag> docker compose build app
+./scripts/sklad-stack build
 ./scripts/nas-cutover status
 ```
 
@@ -143,7 +143,7 @@ Only from the archive, with Sklad stopped:
 ```sh
 cd /share/Container/sklad && ./scripts/sklad-stack down
 tar -xzf /share/Backup/sklad/legacy-equipment-log-<time>.tar.gz -C /
-cd <legacy folder shown by status> && docker compose up -d --build
+cd <legacy folder shown by status> && docker-compose up -d --build
 ```
 
 Rentals recorded in Sklad meanwhile are not in the old app.
