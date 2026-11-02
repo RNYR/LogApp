@@ -51,7 +51,7 @@ inspect() { docker inspect -f "$1" "$LEGACY" 2>/dev/null || true; }
 # Paths of the legacy install. Read from the container while it exists, and
 # remembered in $STATE so `finish` still knows them.
 load_legacy() {
-	DATA= WORKDIR= IMAGE= IMAGE_ID= ARCHIVE= AVAHI=
+	DATA='' WORKDIR='' IMAGE='' IMAGE_ID='' ARCHIVE='' AVAHI=''
 	# shellcheck disable=SC1090
 	[ ! -f "$STATE" ] || . "$STATE"
 	if exists; then
