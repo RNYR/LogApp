@@ -9,7 +9,7 @@ Background and the commands behind each step: [DEPLOY-QNAP.md](DEPLOY-QNAP.md).
 The Sklad test stack (`sklad-test`) is not touched by any step here.
 
 Placeholders: `<nas-ip>` = the NAS address, `<user>` = your NAS SSH account,
-`<tag>` = the release, e.g. `2.0.3`.
+`<tag>` = the release, e.g. `2.0.4`.
 
 ## 1. Before the day
 

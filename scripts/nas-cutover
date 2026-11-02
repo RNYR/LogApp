@@ -82,7 +82,19 @@ STATE_EOF
 	chmod 600 "$STATE"
 }
 
-health() { docker inspect -f '{{if .State.Health}}{{.State.Health.Status}}{{else}}none{{end}}' "$1" 2>/dev/null || echo missing; }
+health() {
+	docker inspect -f '{{if .State.Health}}{{.State.Health.Status}}{{else}}none{{end}}' "$1" 2>/dev/null | grep . || echo missing
+}
+
+# The legacy image: by name if that tag still exists, else by ID (a rebuilt
+# image keeps the container's original image alive but untagged).
+image_present() {
+	if [ -n "$IMAGE" ] && docker image inspect "$IMAGE" >/dev/null 2>&1; then
+		echo "$IMAGE"
+	elif [ -n "$IMAGE_ID" ] && docker image inspect "$IMAGE_ID" >/dev/null 2>&1; then
+		echo "$IMAGE_ID"
+	fi
+}
 
 items_in() { [ -f "$1/inventory.json" ] && grep -o '"id"' "$1/inventory.json" | wc -l | tr -d ' ' || echo "?"; }
 
@@ -96,9 +108,14 @@ status() {
 		echo "   container: not present"
 	fi
 	gone() { [ -e "$1" ] || echo " (deleted)"; }
-	img_state=
-	[ -z "$IMAGE" ] || docker image inspect "$IMAGE" >/dev/null 2>&1 || img_state=" (deleted)"
-	echo "   image:    ${IMAGE:-?}${img_state}"
+	present=$(image_present)
+	if [ -z "$present" ]; then
+		echo "   image:    ${IMAGE:-?} (deleted)"
+	elif [ "$present" = "$IMAGE" ]; then
+		echo "   image:    $IMAGE"
+	else
+		echo "   image:    ${IMAGE_ID#sha256:} (untagged; was $IMAGE)"
+	fi
 	echo "   folder:   ${WORKDIR:-not found}$( [ -z "$WORKDIR" ] || gone "$WORKDIR")"
 	echo "   data:     ${DATA:-not found} (items: $(items_in "${DATA:-/nonexistent}"))"
 	for f in ${AVAHI:-}; do echo "   mDNS:     $f$(gone "$f")"; done
@@ -219,7 +236,8 @@ finish() {
 
 	echo "This permanently deletes the legacy app:"
 	exists && echo "   container  $LEGACY"
-	[ -z "$IMAGE" ] || echo "   image      $IMAGE"
+	present=$(image_present)
+	[ -z "$present" ] || echo "   image      ${IMAGE:-?} (${IMAGE_ID#sha256:})"
 	case "$WORKDIR" in
 		*equipment-log*) echo "   folder     $WORKDIR   (including its data)" ;;
 		"") echo "   folder     (not found; nothing to delete)" ;;
@@ -232,8 +250,18 @@ finish() {
 	confirm delete
 
 	if exists; then docker rm "$LEGACY" >/dev/null && echo "   removed container $LEGACY"; fi
-	if [ -n "$IMAGE" ] && docker image inspect "$IMAGE" >/dev/null 2>&1; then
-		docker image rm "$IMAGE" >/dev/null && echo "   removed image $IMAGE" || echo "   ! image $IMAGE still in use; remove it by hand"
+	# The tag first (if it still points at this image), then the image by ID.
+	if [ -n "$IMAGE" ] && [ "$(docker image inspect -f '{{.Id}}' "$IMAGE" 2>/dev/null)" = "$IMAGE_ID" ]; then
+		docker image rm "$IMAGE" >/dev/null 2>&1 || true
+	fi
+	if [ -n "$IMAGE_ID" ] && docker image inspect "$IMAGE_ID" >/dev/null 2>&1; then
+		if docker image rm "$IMAGE_ID" >/dev/null 2>&1; then
+			echo "   removed image ${IMAGE:-} (${IMAGE_ID#sha256:})"
+		else
+			echo "   ! image ${IMAGE_ID#sha256:} could not be removed (still used?): docker image rm $IMAGE_ID"
+		fi
+	elif [ -n "$IMAGE" ] && docker image inspect "$IMAGE" >/dev/null 2>&1; then
+		echo "   note: the tag $IMAGE now names a different image; left in place"
 	fi
 	case "$WORKDIR" in
 		*equipment-log*) [ ! -d "$WORKDIR" ] || { rm -rf "$WORKDIR" && echo "   removed $WORKDIR"; } ;;

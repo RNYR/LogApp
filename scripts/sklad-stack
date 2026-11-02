@@ -85,8 +85,8 @@ running() { [ "$(docker inspect -f '{{.State.Running}}' "$1" 2>/dev/null || true
 wait_healthy() {
 	i=0
 	while [ $i -lt 36 ]; do
-		a=$(docker inspect -f '{{if .State.Health}}{{.State.Health.Status}}{{else}}none{{end}}' "$APP" 2>/dev/null || echo missing)
-		c=$(docker inspect -f '{{if .State.Health}}{{.State.Health.Status}}{{else}}none{{end}}' "$CADDY" 2>/dev/null || echo missing)
+		a=$(docker inspect -f '{{if .State.Health}}{{.State.Health.Status}}{{else}}none{{end}}' "$APP" 2>/dev/null | grep . || echo missing)
+		c=$(docker inspect -f '{{if .State.Health}}{{.State.Health.Status}}{{else}}none{{end}}' "$CADDY" 2>/dev/null | grep . || echo missing)
 		r=$(docker inspect -f '{{.RestartCount}}' "$APP" 2>/dev/null || echo 0)
 		if [ "$a" = healthy ] && [ "$c" = healthy ]; then
 			note "healthy: $APP and $CADDY"

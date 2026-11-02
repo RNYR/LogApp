@@ -5,6 +5,17 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.0.4] - 2026-11-02
+
+### Fixed
+
+- `nas-cutover finish` removes the legacy image by ID when its tag has moved
+  on (the live `equipment-log` container runs an untagged image), so the old
+  app is deleted completely; `status` reports such an image instead of
+  calling it deleted.
+- `nas-cutover status` / `sklad-stack` print `missing` on one line for a
+  container that does not exist yet.
+
 ## [2.0.3] - 2026-11-02
 
 ### Fixed
