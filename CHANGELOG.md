@@ -31,6 +31,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Scanner quiet-zone assist: when a frame does not decode, ZXing retries on
+  crops that end inside the label's white margins. Thin CODE128 labels wrapped
+  tightly around dark parts (e.g. lens barrels) now read in the live view and
+  with Scan from photo; on browsers with a native `BarcodeDetector` it runs on
+  every 4th empty frame. `docs/LABELS.md` has printing tips for such parts.
 - Production deployment tooling: `scripts/make-bundle` and `scripts/push-to-nas`
   (Mac), `scripts/nas-deploy` (backup → build `sklad:<tag>` → swap → health
   check) and `scripts/sklad-stack` (`preflight`, `backup` with the Caddy CA,

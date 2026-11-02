@@ -26,6 +26,23 @@ If scanning fails, check the exact ID, print quality, barcode width, clear space
 around the bars, lighting and focus. Try wider tape when the barcode is clipped.
 Physical camera/scanner testing remains necessary. See [camera setup](TLS-CAMERA.md).
 
+### Thin labels on small or round parts
+
+Labels wrapped around lens barrels, cables and similar parts often leave only a
+few millimetres of white tape before and after the bars, with the dark part
+right next to it. Barcode readers require that blank margin (the *quiet zone*)
+and reject such frames. The scanner compensates: when a frame does not decode,
+it retries on crops that end inside the white tape margins, which reads labels
+the plain decoder misses. To help it:
+
+- Leave as much white tape as practical before and after the bars; the margin
+  may wrap around the back of the part.
+- On small round parts, a narrower barcode width can read better than Large: the
+  shorter code curves less, and the margins stay visible.
+- Hold the label across the aiming line and avoid a glare stripe on glossy tape.
+- If the live view still struggles, use **Scan from photo** — the native camera
+  takes a sharper picture.
+
 ## Sources (verified 2026-10-18)
 
 - [Brother PT-E300 product details](https://www.brother-usa.com/p/mobile-label-printers/PTE300)

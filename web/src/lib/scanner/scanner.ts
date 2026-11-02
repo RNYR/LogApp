@@ -7,6 +7,10 @@
  *   2. **ZXing fallback** (`@zxing/library`) for iOS Safari and any browser
  *      without a usable `BarcodeDetector`. It is loaded lazily so the ZXing
  *      bundle is only fetched when actually needed.
+ *   3. **Quiet-zone assist** (`quietZoneCuts`): when a frame does not decode,
+ *      ZXing retries on crops that end inside the label's white margins, for
+ *      thin labels wrapped tightly around dark parts. It runs on every empty
+ *      ZXing frame and on every 4th empty `BarcodeDetector` frame.
  *
  * Both paths share one `requestAnimationFrame` loop, de-duplicate repeated reads
  * of the same label, and emit audio + haptic feedback on a successful decode.
@@ -265,7 +269,24 @@ function toScannerError(cause: unknown): ScannerError {
 // ---------------------------------------------------------------------------
 
 interface ZxingDecoder {
-  decode(context: CanvasRenderingContext2D, width: number, height: number): string | null
+  /** Luminance plane of the whole canvas (read once, shared by both decoders). */
+  luminance(context: CanvasRenderingContext2D, width: number, height: number): Uint8ClampedArray
+  /** Plain ZXing decode of the whole plane. */
+  decode(luminance: Uint8ClampedArray, width: number, height: number): string | null
+  /** Decode with a synthetic quiet zone (see `quietZoneCuts`). */
+  decodeQuietZone(
+    luminance: Uint8ClampedArray,
+    width: number,
+    height: number,
+    bands: readonly QuietZoneBand[],
+    maxTries: number,
+  ): string | null
+}
+
+/** A horizontal strip to search, as fractions of the frame height. */
+export interface QuietZoneBand {
+  center: number
+  halfHeight: number
 }
 
 /**
@@ -313,7 +334,110 @@ export function visibleVideoRegion(
   return { x: 0, y: Math.round((videoHeight - height) / 2), width: videoWidth, height }
 }
 
-async function loadZxingDecoder(): Promise<ZxingDecoder> {
+/**
+ * Candidate horizontal crops that give a cramped label a quiet zone.
+ *
+ * ZXing only accepts a CODE128 start pattern with blank space in front of it
+ * (half the pattern's width). Thin labels wrapped tightly around a part — a
+ * lens barrel, a cable — leave only a few modules of white tape before the
+ * dark object, so a frame that shows the object is rejected while a crop that
+ * ends inside the tape margin decodes fine (the image border counts as quiet
+ * zone). Painting the outside white instead does not work: it skews ZXing's
+ * binarizers.
+ *
+ * The band is averaged into a column profile and split into light and dark
+ * runs. A tape margin is recognisable as a light run next to a long dark run
+ * (the part itself — no bar is that wide) and/or as one of the widest light
+ * runs. Cuts go through the middle of such runs; [left, right] pairs come back
+ * best first: both ends recognised by more signals, then the wider span.
+ */
+export function quietZoneCuts(
+  luminance: Uint8ClampedArray,
+  width: number,
+  height: number,
+  band: QuietZoneBand,
+  maxWidest = 5,
+): Array<[number, number]> {
+  const top = Math.max(0, Math.round(height * (band.center - band.halfHeight)))
+  const bottom = Math.min(height, Math.round(height * (band.center + band.halfHeight)))
+  if (bottom - top < 1 || width < 2) return []
+
+  const profile = new Float32Array(width)
+  for (let y = top; y < bottom; y++) {
+    const row = y * width
+    for (let x = 0; x < width; x++) profile[x] += luminance[row + x]
+  }
+  const sorted = Float32Array.from(profile).sort()
+  const dark = sorted[Math.floor(width * 0.1)]
+  const light = sorted[Math.floor(width * 0.9)]
+  // Too little contrast across the band: nothing barcode-like to cut around.
+  if (light - dark < 30 * (bottom - top)) return []
+  const threshold = (dark + light) / 2
+
+  // Alternating runs; light runs touching the frame edge need no help.
+  const runs: Array<{ start: number; end: number; light: boolean }> = []
+  for (let x = 0; x < width; ) {
+    const isLight = profile[x] > threshold
+    let end = x + 1
+    while (end < width && profile[end] > threshold === isLight) end++
+    runs.push({ start: x, end, light: isLight })
+    x = end
+  }
+  const lightRuns = runs.filter((run) => run.light && run.start > 0 && run.end < width)
+  if (lightRuns.length < 8) return []
+  const widths = lightRuns.map((run) => run.end - run.start).sort((a, b) => a - b)
+  const typical = widths[Math.floor(widths.length / 2)]
+
+  const score = new Map<number, number>()
+  const mark = (run: { start: number; end: number }, points: number): void => {
+    const cut = Math.round((run.start + run.end) / 2)
+    score.set(cut, (score.get(cut) ?? 0) + points)
+  }
+  for (const run of [...lightRuns].sort((a, b) => b.end - b.start - (a.end - a.start)).slice(0, maxWidest)) {
+    mark(run, 1)
+  }
+  runs.forEach((run, i) => {
+    if (run.light || run.end - run.start < typical * 5) return
+    for (const neighbour of [runs[i - 1], runs[i + 1]]) {
+      if (neighbour && lightRuns.includes(neighbour)) mark(neighbour, 2)
+    }
+  })
+
+  const cuts = [...score.keys()].sort((a, b) => a - b)
+  const pairs: Array<{ cut: [number, number]; rank: number }> = []
+  for (let i = 0; i < cuts.length; i++) {
+    for (let j = i + 1; j < cuts.length; j++) {
+      const [left, right] = [cuts[i], cuts[j]]
+      if (right - left < width * 0.2) continue
+      // A CODE128 symbol has at least a dozen spaces; skip spans without them.
+      const spaces = lightRuns.filter((run) => run.start > left && run.end < right).length
+      if (spaces < 8) continue
+      pairs.push({ cut: [left, right], rank: (score.get(left) ?? 0) + (score.get(right) ?? 0) })
+    }
+  }
+  pairs.sort((a, b) => b.rank - a.rank || b.cut[1] - b.cut[0] - (a.cut[1] - a.cut[0]))
+  return pairs.map((pair) => pair.cut)
+}
+
+/** Copy columns [left, right) of rows [top, bottom) into a new plane. */
+function cropLuminance(
+  luminance: Uint8ClampedArray,
+  width: number,
+  left: number,
+  right: number,
+  top: number,
+  bottom: number,
+): Uint8ClampedArray {
+  const cropWidth = right - left
+  const out = new Uint8ClampedArray(cropWidth * (bottom - top))
+  for (let y = top; y < bottom; y++) {
+    out.set(luminance.subarray(y * width + left, y * width + right), (y - top) * cropWidth)
+  }
+  return out
+}
+
+/** Lazily loads ZXing (exported for the decoder tests). */
+export async function loadZxingDecoder(): Promise<ZxingDecoder> {
   const {
     MultiFormatReader,
     RGBLuminanceSource,
@@ -344,17 +468,35 @@ async function loadZxingDecoder(): Promise<ZxingDecoder> {
     }
   }
 
+  function decodePlane(luminance: Uint8ClampedArray, width: number, height: number): string | null {
+    const source = new RGBLuminanceSource(luminance, width, height)
+    // The local (hybrid) binarizer copes with uneven light; the global one
+    // is ZXing's recommendation for 1D codes and wins on soft, low-contrast
+    // frames. Try both before giving up on a frame.
+    return (
+      attempt(new BinaryBitmap(new HybridBinarizer(source))) ??
+      attempt(new BinaryBitmap(new GlobalHistogramBinarizer(source)))
+    )
+  }
+
   return {
-    decode(context, width, height) {
-      const image = context.getImageData(0, 0, width, height)
-      const source = new RGBLuminanceSource(rgbaToLuminance(image.data, width, height), width, height)
-      // The local (hybrid) binarizer copes with uneven light; the global one
-      // is ZXing's recommendation for 1D codes and wins on soft, low-contrast
-      // frames. Try both before giving up on a frame.
-      return (
-        attempt(new BinaryBitmap(new HybridBinarizer(source))) ??
-        attempt(new BinaryBitmap(new GlobalHistogramBinarizer(source)))
-      )
+    luminance(context, width, height) {
+      return rgbaToLuminance(context.getImageData(0, 0, width, height).data, width, height)
+    },
+    decode: decodePlane,
+    decodeQuietZone(luminance, width, height, bands, maxTries) {
+      let tries = 0
+      for (const band of bands) {
+        const top = Math.max(0, Math.round(height * (band.center - band.halfHeight)))
+        const bottom = Math.min(height, Math.round(height * (band.center + band.halfHeight)))
+        for (const [left, right] of quietZoneCuts(luminance, width, height, band)) {
+          if (tries++ >= maxTries) return null
+          const crop = cropLuminance(luminance, width, left, right, top, bottom)
+          const value = decodePlane(crop, right - left, bottom - top)
+          if (value) return value
+        }
+      }
+      return null
     },
   }
 }
@@ -377,6 +519,19 @@ interface TorchConstraint {
 
 /** Minimum time between decoded frames (~11 fps): enough for a QR-grade loop. */
 const FRAME_INTERVAL_MS = 90
+
+/**
+ * Bands around the aiming line (mid-height of the preview) for the quiet-zone
+ * assist. One band is tried per frame, in turn, to keep each frame cheap.
+ */
+const LIVE_QUIET_ZONE_BANDS: readonly QuietZoneBand[] = [
+  { center: 0.5, halfHeight: 0.1 },
+  { center: 0.42, halfHeight: 0.1 },
+  { center: 0.58, halfHeight: 0.1 },
+]
+const LIVE_QUIET_ZONE_TRIES = 4
+/** With a native detector, run the ZXing quiet-zone assist every Nth empty frame. */
+const NATIVE_ASSIST_EVERY = 4
 
 export function createScanner(options: ScannerOptions): Scanner {
   const {
@@ -404,6 +559,9 @@ export function createScanner(options: ScannerOptions): Scanner {
   let lastValueAt = 0
   let torchOn = false
   let nativeErrors = 0
+  let nativeMisses = 0
+  let assistLoading = false
+  let bandIndex = 0
   let decodeCostMs = 0
   const feedback = createFeedback(feedbackEnabled)
 
@@ -462,6 +620,9 @@ export function createScanner(options: ScannerOptions): Scanner {
       const first = results.find((entry) => entry.rawValue)
       if (first && running) emit(normalizeScanValue(first.rawValue), 'barcode-detector')
       nativeErrors = 0
+      // Native detectors share ZXing's quiet-zone requirement; give cramped
+      // labels the same assist now and then.
+      if (!first && running && ++nativeMisses % NATIVE_ASSIST_EVERY === 0) assistNative()
     } catch {
       // Transient detector errors (e.g. frame not ready) are ignored, but a
       // detector that keeps failing (seen on browsers that expose an
@@ -480,18 +641,54 @@ export function createScanner(options: ScannerOptions): Scanner {
     }
   }
 
-  function decodeZxing(): void {
-    if (!zxing || !canvasContext) return
-    if (!video.videoWidth || !video.videoHeight) return
+  /** Draw the visible part of the frame and return its luminance plane. */
+  function grabFrame(decoder: ZxingDecoder): { luminance: Uint8ClampedArray; width: number; height: number } | null {
+    if (!canvasContext || !video.videoWidth || !video.videoHeight) return null
     const region = visibleVideoRegion(video.videoWidth, video.videoHeight, video.clientWidth, video.clientHeight)
     const { width, height } = region
-    if (!width || !height) return
+    if (!width || !height) return null
     if (canvas.width !== width) canvas.width = width
     if (canvas.height !== height) canvas.height = height
-    const started = performance.now()
     canvasContext.drawImage(video, region.x, region.y, width, height, 0, 0, width, height)
-    const value = zxing.decode(canvasContext, width, height)
+    return { luminance: decoder.luminance(canvasContext, width, height), width, height }
+  }
+
+  function nextBand(): QuietZoneBand {
+    const band = LIVE_QUIET_ZONE_BANDS[bandIndex % LIVE_QUIET_ZONE_BANDS.length]
+    bandIndex += 1
+    return band
+  }
+
+  function decodeZxing(): void {
+    if (!zxing) return
+    const started = performance.now()
+    const frame = grabFrame(zxing)
+    if (!frame) return
+    const { luminance, width, height } = frame
+    const value =
+      zxing.decode(luminance, width, height) ??
+      zxing.decodeQuietZone(luminance, width, height, [nextBand()], LIVE_QUIET_ZONE_TRIES)
     decodeCostMs = performance.now() - started
+    if (value) emit(normalizeScanValue(value), 'zxing')
+  }
+
+  function assistNative(): void {
+    if (!zxing) {
+      if (assistLoading) return
+      assistLoading = true
+      void loadZxingDecoder()
+        .then((decoder) => {
+          if (running) zxing ??= decoder
+        })
+        .catch(() => undefined)
+        .finally(() => {
+          assistLoading = false
+        })
+      return
+    }
+    const frame = grabFrame(zxing)
+    if (!frame) return
+    const value = zxing.decodeQuietZone(frame.luminance, frame.width, frame.height, [nextBand()], LIVE_QUIET_ZONE_TRIES)
     if (value) emit(normalizeScanValue(value), 'zxing')
   }
 
@@ -653,6 +850,8 @@ export function createScanner(options: ScannerOptions): Scanner {
     detectBusy = false
     torchOn = false
     nativeErrors = 0
+    nativeMisses = 0
+    bandIndex = 0
     decodeCostMs = 0
     stopStream()
     feedback.dispose()
@@ -709,6 +908,8 @@ export async function decodeImageFile(file: Blob): Promise<string | null> {
     const decoder = await loadZxingDecoder()
     const longest = Math.max(bitmap.width, bitmap.height)
     let lastWidth = 0
+    // The label can be anywhere in a photo: search thin bands top to bottom.
+    const bands = Array.from({ length: 11 }, (_, i) => ({ center: (i + 1) / 12, halfHeight: 0.04 }))
     for (const target of [2560, 1600, 1000]) {
       const scale = Math.min(1, target / longest)
       const width = Math.round(bitmap.width * scale)
@@ -721,7 +922,9 @@ export async function decodeImageFile(file: Blob): Promise<string | null> {
       const context = canvas.getContext('2d', { willReadFrequently: true })
       if (!context) return null
       context.drawImage(bitmap, 0, 0, width, height)
-      const value = decoder.decode(context, width, height)
+      const luminance = decoder.luminance(context, width, height)
+      const value =
+        decoder.decode(luminance, width, height) ?? decoder.decodeQuietZone(luminance, width, height, bands, 60)
       if (value) return normalizeScanValue(value)
     }
     return null
