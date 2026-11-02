@@ -11,7 +11,7 @@
 # Contents: Dockerfile, .dockerignore, go.mod/go.sum, server/, web/ (without
 # node_modules, dist, test-results), docker-compose.yml, .env.example,
 # deploy/Caddyfile(.byo), deploy/certs/README.md, deploy/avahi/sklad.service,
-# scripts/sklad-stack, scripts/nas-deploy, the operator docs and a RELEASE
+# scripts/sklad-stack, scripts/nas-deploy, scripts/nas-cutover, the operator docs and a RELEASE
 # file (TAG, COMMIT). The folder is rebuilt from scratch each run; it is git-
 # and docker-ignored.
 # =============================================================================
@@ -54,9 +54,9 @@ cp Dockerfile .dockerignore go.mod go.sum docker-compose.yml .env.example "$OUT/
 cp deploy/Caddyfile deploy/Caddyfile.byo "$OUT/deploy/"
 cp deploy/certs/README.md "$OUT/deploy/certs/"
 cp deploy/avahi/sklad.service "$OUT/deploy/avahi/"
-cp scripts/sklad-stack scripts/nas-deploy "$OUT/scripts/"
-cp docs/DEPLOY-QNAP.md docs/TLS-CAMERA.md docs/LABELS.md "$OUT/docs/"
-chmod +x "$OUT/scripts/sklad-stack" "$OUT/scripts/nas-deploy"
+cp scripts/sklad-stack scripts/nas-deploy scripts/nas-cutover "$OUT/scripts/"
+cp docs/DEPLOY-QNAP.md docs/CUTOVER.md docs/TLS-CAMERA.md docs/LABELS.md "$OUT/docs/"
+chmod +x "$OUT/scripts/sklad-stack" "$OUT/scripts/nas-deploy" "$OUT/scripts/nas-cutover"
 printf 'TAG=%s\nCOMMIT=%s\n' "$TAG" "$COMMIT" >"$OUT/RELEASE"
 
 EXCLUDES=(--exclude node_modules --exclude dist --exclude test-results

@@ -5,7 +5,10 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [2.0.2] - 2026-11-02
+
+Go-live release: security hardening from the readiness review, production
+deployment and cut-over tooling, and better scanning of thin labels.
 
 ### Security
 
@@ -43,6 +46,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `docs/DEPLOY-QNAP.md` rewritten as the live runbook: first install, cut-over
   from `equipment-log`, upgrade, rollback, scheduled and off-NAS backups,
   restore drill.
+- `scripts/nas-cutover` and `docs/CUTOVER.md`: one-time switch from
+  `equipment-log` — archive and stop it, import its inventory, start Sklad,
+  `undo` until verified, then `finish` deletes the old container, image,
+  folder, data and mDNS file.
 
 ## [2.0.1] - 2026-10-29
 

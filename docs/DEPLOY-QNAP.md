@@ -140,74 +140,21 @@ replace a backup taken before the import.
 
 ## 4. Cut-over from `equipment-log`
 
-Today the legacy container `equipment-log` publishes ports **80** and **8787**
-and is reached as `http://sklad.local` / `http://sklad.local:8787`. After the
-cut-over Sklad answers `https://sklad.local` (port 80 redirects to HTTPS) and
-**port 8787 stops answering** — tell users the new address.
+Follow **[CUTOVER.md](CUTOVER.md)**: the step-by-step go-live checklist. It is
+driven by `scripts/nas-cutover`, which runs from the live folder:
 
-Before the window:
+| Command | Does |
+|---|---|
+| `nas-cutover status` | shows the legacy container, folder, data (item count), mDNS file; changes nothing |
+| `nas-cutover go` | stops `equipment-log` (kept), archives it to `/share/Backup/sklad`, exports `inventory.json`/`options.json`, import dry run → confirm → import, `preflight`, starts Sklad, first backup |
+| `nas-cutover undo` | before `finish`: stops Sklad (data kept) and starts `equipment-log` again |
+| `nas-cutover finish` | deletes the legacy container, image, folder (with its data), installed `logapp.service` (replaced by `sklad.service`) and the exported copies; keeps the archive |
 
-- [ ] The release passed the test stack (§11), including the import rehearsal.
-- [ ] Files and image are on the NAS (§2), `.env` filled in, `preflight` shows
-      only the port-80 conflict.
-- [ ] Find how `sklad.local` resolves today, so you can repoint it:
-      `ls /etc/avahi/services/` (the legacy `logapp.service` advertises
-      `_http._tcp` on port 80), `cat /etc/avahi/hosts`, the router DNS, or the
-      NAS's own host name. QTS rewrites parts of `/etc` at boot, so whatever
-      you change must survive a reboot (test it).
-- [ ] Announce a short freeze: no rental changes in the old app during the window.
-
-In the window, on the NAS:
-
-```sh
-export PATH=/share/Container/bin:$PATH
-# 1. Stop the legacy app; keep the container and its data for rollback.
-docker stop equipment-log
-docker update --restart=no equipment-log        # stays stopped after a reboot
-
-# 2. Final copy of the legacy data, then import into the new, empty live DB.
-legacy=$(docker inspect equipment-log -f '{{range .Mounts}}{{.Source}}{{end}}')
-rm -rf /share/Container/legacy-final && mkdir -p /share/Container/legacy-final
-cp -a "$legacy"/. /share/Container/legacy-final/
-cd /share/Container/sklad
-./scripts/sklad-stack compose run --rm --no-deps --entrypoint import-json \
-  -v /share/Container/legacy-final:/legacy:ro app --source /legacy --dry-run
-./scripts/sklad-stack compose run --rm --no-deps --entrypoint import-json \
-  -v /share/Container/legacy-final:/legacy:ro app --source /legacy
-
-# 3. Start Sklad and wait until both containers are healthy.
-./scripts/sklad-stack preflight
-./scripts/sklad-stack up
-./scripts/sklad-stack backup                     # first backup out of the volume
-```
-
-Then:
-
-4. **Name resolution:** replace the legacy mDNS advertisement with
-   `deploy/avahi/sklad.service` (HTTPS, port 443 or your `SKLAD_HTTPS_PORT`)
-   wherever `logapp.service` lived, and keep `sklad.local` pointing at the NAS
-   (Avahi host name, `/etc/avahi/hosts`, or router DNS). Android resolves
-   `.local` unreliably — a router DNS entry or the IP address
-   (`https://<nas-ip>`) always works because the certificate covers the LAN IP.
-5. **Trust the CA** on each device ([TLS-CAMERA.md](TLS-CAMERA.md)); the camera
-   needs it.
-6. **Verify:** Admin login + forced password change, item count, a rental
-   update from a phone, a label scan, and that `http://sklad.local` redirects to
-   HTTPS. Then reboot the NAS once and check that both containers come back
-   healthy and the name still resolves.
-
-**If the cut-over has to be undone** (before users rely on Sklad):
-
-```sh
-cd /share/Container/sklad && ./scripts/sklad-stack down     # volumes are kept
-docker update --restart=unless-stopped equipment-log
-docker start equipment-log
-```
-
-and put the legacy mDNS file back. Changes made in Sklad meanwhile are not in
-the legacy app; note them by hand. Keep the stopped `equipment-log` container
-and its data folder until Sklad has run through at least one full rental cycle;
-then remove both and the avahi file, and **revoke the old Gmail app password**.
+Today `equipment-log` publishes ports **80** and **8787** (`http://sklad.local`,
+`http://sklad.local:8787`). Afterwards Sklad answers `https://sklad.local`, port
+80 redirects to HTTPS, and **port 8787 stops answering** — tell users the new
+address. `import-json` never updates existing rows, so the live import happens
+once, inside `go`; rehearse on the test stack (§3) beforehand.
 
 ## 5. Upgrade
 

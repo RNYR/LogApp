@@ -90,7 +90,7 @@ carry_over() {
 	fi
 }
 
-chmod +x "$INCOMING/scripts/sklad-stack" "$INCOMING/scripts/nas-deploy"
+chmod +x "$INCOMING/scripts/sklad-stack" "$INCOMING/scripts/nas-deploy" "$INCOMING/scripts/nas-cutover"
 
 # --- First install -----------------------------------------------------------
 if [ ! -f "$TARGET/.env" ]; then

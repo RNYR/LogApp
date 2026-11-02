@@ -1,0 +1,270 @@
+#!/usr/bin/env sh
+# =============================================================================
+# scripts/nas-cutover — replace the legacy equipment-log app with Sklad on the
+# NAS, then delete the legacy app completely. Run from the live Sklad folder
+# (/share/Container/sklad) after the first install (docs/CUTOVER.md).
+#
+#   ./scripts/nas-cutover status   what is installed now (changes nothing)
+#   ./scripts/nas-cutover go       stop equipment-log, archive it, import its
+#                                  inventory into Sklad, start Sklad
+#   ./scripts/nas-cutover undo     before `finish` only: stop Sklad and start
+#                                  equipment-log again
+#   ./scripts/nas-cutover finish   delete equipment-log: container, image,
+#                                  folder (incl. its data), mDNS file and the
+#                                  exported copies. The archive made by `go`
+#                                  is kept in /share/Backup/sklad.
+# =============================================================================
+set -eu
+
+cd "$(dirname "$0")/.."
+HERE=$(pwd)
+PARENT=$(dirname "$HERE")
+
+LEGACY=${SKLAD_LEGACY_CONTAINER:-equipment-log}
+LEGACY_DATA_MOUNT=/opt/equipment-log/app/data
+BACKUP_ROOT=${SKLAD_BACKUP_DIR:-/share/Backup/sklad}
+EXPORT="$PARENT/legacy-final"
+REHEARSAL="$PARENT/legacy-copy"
+STATE="$PARENT/.sklad-cutover"
+HISTORY="$PARENT/.sklad-deploy-history"
+STACK="$HERE/scripts/sklad-stack"
+
+PATH=/share/Container/bin:/share/CACHEDEV1_DATA/.qpkg/container-station/bin:$PATH
+export PATH
+
+die() { echo "nas-cutover: $*" >&2; exit 1; }
+note() { echo "== $*"; }
+
+[ -f "$HERE/docker-compose.yml" ] && [ -x "$STACK" ] || die "run this from the live Sklad folder (scripts/sklad-stack missing)"
+case "$HERE" in *sklad-test*) die "this is the TEST folder" ;; esac
+command -v docker >/dev/null 2>&1 || die "docker not found"
+
+confirm() {
+	printf 'Type "%s" to continue: ' "$1"
+	read -r answer
+	[ "$answer" = "$1" ] || die "aborted (nothing further was changed)"
+}
+
+exists() { docker inspect "$LEGACY" >/dev/null 2>&1; }
+inspect() { docker inspect -f "$1" "$LEGACY" 2>/dev/null || true; }
+
+# Paths of the legacy install. Read from the container while it exists, and
+# remembered in $STATE so `finish` still knows them.
+load_legacy() {
+	DATA= WORKDIR= IMAGE= IMAGE_ID= ARCHIVE= AVAHI=
+	# shellcheck disable=SC1090
+	[ ! -f "$STATE" ] || . "$STATE"
+	if exists; then
+		DATA=$(inspect "{{range .Mounts}}{{if eq .Destination \"$LEGACY_DATA_MOUNT\"}}{{.Source}}{{end}}{{end}}")
+		WORKDIR=$(inspect '{{index .Config.Labels "com.docker.compose.project.working_dir"}}')
+		[ "$WORKDIR" != "<no value>" ] || WORKDIR=
+		IMAGE=$(inspect '{{.Config.Image}}')
+		IMAGE_ID=$(inspect '{{.Image}}')
+	fi
+	if [ -z "$WORKDIR" ] && [ -n "$DATA" ]; then
+		case "$DATA" in */app/data) WORKDIR=${DATA%/app/data} ;; esac
+	fi
+	if [ -z "$AVAHI" ]; then
+		AVAHI=$(find /etc/avahi/services /share/Container /share/CACHEDEV1_DATA/.qpkg -maxdepth 4 \
+			-name logapp.service 2>/dev/null | grep -v "^${WORKDIR:-/nonexistent}/" | tr '\n' ' ' || true)
+	fi
+}
+
+save_state() {
+	cat >"$STATE" <<STATE_EOF
+DATA='$DATA'
+WORKDIR='$WORKDIR'
+IMAGE='$IMAGE'
+IMAGE_ID='$IMAGE_ID'
+ARCHIVE='$ARCHIVE'
+AVAHI='$AVAHI'
+STATE_EOF
+	chmod 600 "$STATE"
+}
+
+health() { docker inspect -f '{{if .State.Health}}{{.State.Health.Status}}{{else}}none{{end}}' "$1" 2>/dev/null || echo missing; }
+
+items_in() { [ -f "$1/inventory.json" ] && grep -o '"id"' "$1/inventory.json" | wc -l | tr -d ' ' || echo "?"; }
+
+status() {
+	load_legacy
+	note "Legacy app ($LEGACY)"
+	if exists; then
+		echo "   state:    $(inspect '{{.State.Status}}') (restart policy: $(inspect '{{.HostConfig.RestartPolicy.Name}}'))"
+		echo "   ports:    $(docker port "$LEGACY" 2>/dev/null | tr '\n' ' ')"
+	else
+		echo "   container: not present"
+	fi
+	gone() { [ -e "$1" ] || echo " (deleted)"; }
+	img_state=
+	[ -z "$IMAGE" ] || docker image inspect "$IMAGE" >/dev/null 2>&1 || img_state=" (deleted)"
+	echo "   image:    ${IMAGE:-?}${img_state}"
+	echo "   folder:   ${WORKDIR:-not found}$( [ -z "$WORKDIR" ] || gone "$WORKDIR")"
+	echo "   data:     ${DATA:-not found} (items: $(items_in "${DATA:-/nonexistent}"))"
+	for f in ${AVAHI:-}; do echo "   mDNS:     $f$(gone "$f")"; done
+	[ -n "$AVAHI" ] || echo "   mDNS:     no installed logapp.service found"
+	echo "   archive:  ${ARCHIVE:-none yet}"
+	note "Sklad"
+	echo "   image tag: $(sed -n 's/^SKLAD_IMAGE_TAG=//p' .env 2>/dev/null | tail -n 1)"
+	echo "   sklad-app: $(health sklad-app)   sklad-caddy: $(health sklad-caddy)"
+	if docker volume inspect sklad_sklad_data >/dev/null 2>&1; then
+		echo "   database volume: exists"
+	else
+		echo "   database volume: not created yet"
+	fi
+}
+
+on_go_failure() {
+	echo >&2
+	echo "nas-cutover: stopped before the end. equipment-log is stopped but NOT deleted." >&2
+	echo "   Fix the problem and run ./scripts/nas-cutover go again, or bring the old app back:" >&2
+	echo "   ./scripts/nas-cutover undo" >&2
+}
+
+go() {
+	[ -f .env ] || die ".env missing: finish the first install (docs/CUTOVER.md step 2)"
+	tag=$(sed -n 's/^SKLAD_IMAGE_TAG=//p' .env | tail -n 1)
+	docker image inspect "sklad:${tag:-local}" >/dev/null 2>&1 ||
+		die "image sklad:${tag:-local} is not built yet (docs/CUTOVER.md step 2)"
+	load_legacy
+	exists || die "container $LEGACY not found (already removed?)"
+	[ -n "$DATA" ] && [ -f "$DATA/inventory.json" ] || die "legacy data not found (mount $LEGACY_DATA_MOUNT → '${DATA}')"
+
+	status
+	echo
+	echo "This stops $LEGACY, archives it to $BACKUP_ROOT, imports its inventory into"
+	echo "Sklad and starts Sklad on the ports $LEGACY used. Nothing is deleted yet."
+	if docker volume inspect sklad_sklad_data >/dev/null 2>&1; then
+		echo "NOTE: the Sklad database volume already exists; the import skips items it already has."
+	fi
+	confirm cutover
+	trap on_go_failure EXIT
+
+	note "1/6 Stopping $LEGACY (kept, restart policy set to no)"
+	docker stop "$LEGACY" >/dev/null
+	docker update --restart=no "$LEGACY" >/dev/null
+
+	note "2/6 Archiving the legacy app"
+	ts=$(date -u +%Y%m%dT%H%M%SZ)
+	mkdir -p "$BACKUP_ROOT"
+	chmod 700 "$BACKUP_ROOT"
+	ARCHIVE="$BACKUP_ROOT/legacy-equipment-log-$ts.tar.gz"
+	src=${WORKDIR:-$DATA}
+	# shellcheck disable=SC2086 # $AVAHI is a space-separated list of paths
+	tar -czf "$ARCHIVE" "$src" $AVAHI 2>/dev/null || tar -czf "$ARCHIVE" "$src"
+	chmod 600 "$ARCHIVE"
+	echo "   $ARCHIVE ($(du -h "$ARCHIVE" | cut -f1)) — contains the old SMTP password; keep it private"
+	save_state
+
+	note "3/6 Exporting inventory.json and options.json (not the SMTP config)"
+	rm -rf "$EXPORT"
+	mkdir -p "$EXPORT"
+	cp "$DATA/inventory.json" "$EXPORT/"
+	[ ! -f "$DATA/options.json" ] || cp "$DATA/options.json" "$EXPORT/"
+	# The importer runs as the app user (uid 10001) and must read these.
+	chmod 755 "$EXPORT"
+	chmod 644 "$EXPORT"/*.json
+	echo "   $(items_in "$EXPORT") items"
+
+	note "4/6 Import dry run"
+	"$STACK" compose run --rm --no-deps --entrypoint import-json \
+		-v "$EXPORT:/legacy:ro" app --source /legacy --dry-run
+	echo
+	echo "Check the counts above (items, types, statuses)."
+	confirm import
+	"$STACK" compose run --rm --no-deps --entrypoint import-json \
+		-v "$EXPORT:/legacy:ro" app --source /legacy
+
+	note "5/6 Starting Sklad"
+	"$STACK" preflight
+	"$STACK" up
+
+	note "6/6 First backup"
+	"$STACK" backup "$BACKUP_ROOT"
+	printf '%s cutover legacy=%s archive=%s\n' "$ts" "$LEGACY" "$ARCHIVE" >>"$HISTORY"
+	trap - EXIT
+
+	cat <<NEXT
+
+== Sklad is live; $LEGACY is stopped but still installed.
+   Verify now (docs/CUTOVER.md step 4): Admin login, item count, a rental from a
+   phone, a label scan, http→https redirect, then reboot the NAS once.
+   All good:  ./scripts/nas-cutover finish     (deletes the old app)
+   Problem:   ./scripts/nas-cutover undo       (old app back, Sklad stopped)
+NEXT
+}
+
+undo() {
+	exists || die "$LEGACY no longer exists (finish already ran); restore it from the archive by hand"
+	echo "This stops Sklad (data kept) and starts $LEGACY again."
+	confirm undo
+	"$STACK" down
+	docker update --restart=unless-stopped "$LEGACY" >/dev/null
+	docker start "$LEGACY" >/dev/null
+	printf '%s cutover-undo\n' "$(date -u +%Y%m%dT%H%M%SZ)" >>"$HISTORY"
+	note "$LEGACY is running again. Put back the legacy mDNS file if you changed it."
+}
+
+finish() {
+	force=0
+	[ "${1:-}" != "--force" ] || force=1
+	load_legacy
+	[ -n "$ARCHIVE" ] && [ -f "$ARCHIVE" ] || die "no legacy archive recorded; run ./scripts/nas-cutover go first"
+	if exists && [ "$(inspect '{{.State.Running}}')" = true ]; then
+		die "$LEGACY is running; finish is for after a successful cut-over"
+	fi
+	if [ "$(health sklad-app)" != healthy ] || [ "$(health sklad-caddy)" != healthy ]; then
+		[ $force = 1 ] || die "Sklad is not healthy; fix that first (or --force)"
+	fi
+
+	echo "This permanently deletes the legacy app:"
+	exists && echo "   container  $LEGACY"
+	[ -z "$IMAGE" ] || echo "   image      $IMAGE"
+	case "$WORKDIR" in
+		*equipment-log*) echo "   folder     $WORKDIR   (including its data)" ;;
+		"") echo "   folder     (not found; nothing to delete)" ;;
+		*) echo "   folder     $WORKDIR — NOT deleted automatically (name does not contain 'equipment-log')" ;;
+	esac
+	for f in $AVAHI; do echo "   mDNS file  $f"; done
+	[ ! -d "$EXPORT" ] || echo "   export     $EXPORT"
+	[ ! -d "$REHEARSAL" ] || echo "   rehearsal  $REHEARSAL"
+	echo "Kept: $ARCHIVE (delete it once the old Gmail app password is revoked)."
+	confirm delete
+
+	if exists; then docker rm "$LEGACY" >/dev/null && echo "   removed container $LEGACY"; fi
+	if [ -n "$IMAGE" ] && docker image inspect "$IMAGE" >/dev/null 2>&1; then
+		docker image rm "$IMAGE" >/dev/null && echo "   removed image $IMAGE" || echo "   ! image $IMAGE still in use; remove it by hand"
+	fi
+	case "$WORKDIR" in
+		*equipment-log*) [ ! -d "$WORKDIR" ] || { rm -rf "$WORKDIR" && echo "   removed $WORKDIR"; } ;;
+	esac
+	services_dir=
+	for f in $AVAHI; do
+		rm -f "$f" && echo "   removed $f"
+		case "$f" in */avahi/services/*) services_dir=$(dirname "$f") ;; esac
+	done
+	rm -rf "$EXPORT" "$REHEARSAL"
+
+	if [ -n "$services_dir" ]; then
+		port=$(sed -n 's/^SKLAD_HTTPS_PORT=//p' .env | tail -n 1)
+		sed "s|<port>443</port>|<port>${port:-443}</port>|" deploy/avahi/sklad.service >"$services_dir/sklad.service"
+		echo "   installed $services_dir/sklad.service (HTTPS port ${port:-443})"
+		echo "   restart Avahi so it takes effect (QTS: Control Panel → Network & File Services → Service Discovery, or reboot)"
+	fi
+	printf '%s legacy-removed container=%s image=%s folder=%s archive=%s\n' \
+		"$(date -u +%Y%m%dT%H%M%SZ)" "$LEGACY" "${IMAGE:-}" "${WORKDIR:-}" "$ARCHIVE" >>"$HISTORY"
+	note "equipment-log is gone. Sklad: ./scripts/sklad-stack ps"
+}
+
+cmd=${1:-}
+[ $# -gt 0 ] && shift
+case "$cmd" in
+	status) status ;;
+	go)     go ;;
+	undo)   undo ;;
+	finish) finish "$@" ;;
+	*)
+		sed -n '3,19p' "$0" | sed 's/^# \{0,1\}//'
+		[ -z "$cmd" ] || exit 1
+		;;
+esac
