@@ -10,10 +10,9 @@ package jobs
 
 import (
 	"context"
-	"crypto/sha256"
+	"crypto/rand"
 	"encoding/hex"
 	"fmt"
-	"strings"
 	"time"
 
 	"sklad/server/internal/notify"
@@ -124,9 +123,16 @@ func (s *Scheduler) NotifyRentals(ctx context.Context, changes []RentalChange, a
 	}
 
 	payload := deliveryPayload{AssetTags: tags, DueCount: total, Truncated: total > len(changes)}
-	deliveryID, _, err := s.reserveDelivery(ctx, webhook, notify.KindRental, rentalKey(now, tags), current, payload)
+	key, err := rentalKey(now)
 	if err != nil {
 		return err
+	}
+	deliveryID, alreadySent, err := s.reserveDelivery(ctx, webhook, notify.KindRental, key, current, payload)
+	if err != nil {
+		return err
+	}
+	if alreadySent {
+		return nil
 	}
 
 	notifier, err := s.notifier(webhook)
@@ -151,8 +157,12 @@ func (s *Scheduler) NotifyRentals(ctx context.Context, changes []RentalChange, a
 }
 
 // rentalKey makes each save's delivery unique: rental alerts are events, not a
-// daily digest, so two saves of the same item are two messages.
-func rentalKey(now time.Time, tags []string) string {
-	sum := sha256.Sum256([]byte(strings.Join(tags, "\n")))
-	return fmt.Sprintf("rental:%d:%s", now.UnixNano(), hex.EncodeToString(sum[:6]))
+// daily digest, so two saves of the same item are two messages — even within
+// the same clock tick.
+func rentalKey(now time.Time) (string, error) {
+	random := make([]byte, 8)
+	if _, err := rand.Read(random); err != nil {
+		return "", fmt.Errorf("jobs: rental delivery key: %w", err)
+	}
+	return fmt.Sprintf("rental:%d:%s", now.UnixNano(), hex.EncodeToString(random)), nil
 }
