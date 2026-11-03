@@ -289,6 +289,28 @@ jobs:
             -v "$PWD/.ci-certs:/certs:ro" \
             caddy:2-alpine caddy validate --config /etc/caddy/Caddyfile --adapter caddyfile
 
+      - name: Caddy validate (deploy/Caddyfile.test, test stack)
+        run: |
+          docker run --rm \
+            -v "$PWD/deploy/Caddyfile.test:/etc/caddy/Caddyfile:ro" \
+            caddy:2-alpine caddy validate --config /etc/caddy/Caddyfile --adapter caddyfile
+
+      # UDP is not published, so HTTP/3 must stay off: otherwise Caddy advertises
+      # Alt-Svc h3 on port 443, which on the NAS belongs to QTS.
+      - name: Caddyfiles serve HTTP/1.1 and HTTP/2 only (no HTTP/3)
+        run: |
+          for f in Caddyfile Caddyfile.byo Caddyfile.test; do
+            docker run --rm -v "$PWD/deploy/$f:/etc/caddy/Caddyfile:ro" \
+              caddy:2-alpine caddy adapt --config /etc/caddy/Caddyfile --adapter caddyfile > "/tmp/$f.json"
+            python3 - "/tmp/$f.json" "$f" <<'PY'
+          import json, sys
+          servers = json.load(open(sys.argv[1]))["apps"]["http"]["servers"]
+          for name, server in servers.items():
+              assert server.get("protocols") == ["h1", "h2"], (sys.argv[2], name, server.get("protocols"))
+          print(sys.argv[2], "protocols h1,h2 on", len(servers), "server(s)")
+          PY
+          done
+
       - name: The certificate script must be idempotent
         run: |
           ./scripts/make-certs --out .ci-certs --hosts sklad.local,sklad --ips 127.0.0.1 | tee /tmp/make-certs.log

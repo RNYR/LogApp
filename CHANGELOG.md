@@ -5,6 +5,17 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.0.6] - 2026-11-03
+
+### Fixed
+
+- **Stalls and dropped requests in Chrome/Brave.** Caddy advertised HTTP/3
+  (`Alt-Svc: h3=":443"`) on its container port, but HTTP/3 needs UDP, which
+  the compose files do not publish — and on the NAS host port 443 belongs to
+  QTS (Sklad answers on 8443). Browsers kept retrying HTTP/3 against the wrong
+  service. All Caddyfiles now serve HTTP/1.1 and HTTP/2 only; CI checks it and
+  also validates `deploy/Caddyfile.test`.
+
 ## [2.0.5] - 2026-11-03
 
 ### Fixed

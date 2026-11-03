@@ -42,6 +42,14 @@
 	# only produces permission warnings here).
 	skip_install_trust
 
+	# HTTP/1.1 and HTTP/2 only. HTTP/3 runs over UDP, which the compose files do
+	# not publish, yet Caddy would still advertise it (Alt-Svc: h3=":443") on its
+	# container port — on the NAS that host port belongs to QTS, so browsers kept
+	# retrying HTTP/3 against the wrong service and requests stalled.
+	servers {
+		protocols h1 h2
+	}
+
 	# Browsers send no SNI when you open https://<ip>. Caddy then picks a
 	# certificate by the connection's local address, which inside Docker is
 	# the container IP, not the NAS IP, so the handshake fails
