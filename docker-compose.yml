@@ -71,7 +71,7 @@ services:
     volumes:
       # Database, backups and generated files. Use a bind mount instead when the
       # NAS backup job must see the files directly, e.g.
-      #   - /share/Container/sklad/data:/data
+      #   - /share/CACHEDEV1_DATA/Feasibility_NAS/Container/sklad/data:/data
       # and make sure the directory is owned by SKLAD_UID/SKLAD_GID first.
       - sklad_data:/data
 

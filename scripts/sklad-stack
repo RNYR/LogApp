@@ -15,7 +15,7 @@
 #   ./scripts/sklad-stack down            stop and remove the containers
 #                                         (data, CA and images are kept)
 #   ./scripts/sklad-stack backup [DIR]    database + CA copy into DIR/<time>/
-#                                         (default /share/Backup/sklad)
+#                                         (default <share>/Backup/sklad)
 #   ./scripts/sklad-stack restore-db FILE replace the database with a backup
 #   ./scripts/sklad-stack restore-ca FILE replace the Caddy CA with a backup
 #   ./scripts/sklad-stack rollback        go back to the previous release
@@ -37,12 +37,29 @@ CADDY=sklad-caddy
 DATA_VOLUME=sklad_sklad_data
 CA_VOLUME=sklad_caddy_data
 HISTORY="$(dirname "$HERE")/.sklad-deploy-history"
+# Backups go next to the install, on the same (persistent) share:
+# <share>/Container/sklad → <share>/Backup/sklad.
+DEFAULT_BACKUP_ROOT="$(dirname "$(dirname "$HERE")")/Backup/sklad"
 BACKUP_KEEP=${SKLAD_BACKUP_KEEP:-30}
 
-# Docker / compose locations on QNAP Container Station (non-login SSH shells
-# do not always have them on PATH).
-PATH=/share/Container/bin:/share/CACHEDEV1_DATA/.qpkg/container-station/bin:$PATH
+# Docker / Compose on QNAP Container Station. /share is a RAM disk rebuilt at
+# boot, so a symlink such as /share/Container/bin does not survive a reboot:
+# look in the Container Station package itself as well.
+CS=/share/CACHEDEV1_DATA/.qpkg/container-station
+PATH=$CS/bin:$CS/usr/bin:/share/Container/bin:$PATH
+if ! command -v docker-compose >/dev/null 2>&1; then
+	found=$(find "$CS" -maxdepth 6 -name docker-compose \( -type f -o -type l \) 2>/dev/null | head -n 1)
+	[ -z "$found" ] || PATH=$(dirname "$found"):$PATH
+fi
 export PATH
+
+# on_ram_disk DIR — true when DIR (or its nearest existing parent) is on tmpfs.
+# On QNAP only the shared folders under /share/CACHEDEV1_DATA survive a reboot.
+on_ram_disk() {
+	d=$1
+	while [ ! -d "$d" ] && [ "$d" != / ]; do d=$(dirname "$d"); done
+	[ "$(df -P "$d" 2>/dev/null | awk 'NR == 2 { print $1 }')" = tmpfs ]
+}
 
 die() { echo "sklad-stack: $*" >&2; exit 1; }
 note() { echo "== $*"; }
@@ -51,6 +68,7 @@ note() { echo "== $*"; }
 case "$HERE" in
 	*sklad-test*) die "this is the TEST folder; use ./scripts/test-stack here" ;;
 esac
+on_ram_disk "$HERE" && echo "sklad-stack: WARNING: $HERE is on the RAM disk and is lost at the next reboot (see docs/DEPLOY-QNAP.md §1)" >&2
 command -v docker >/dev/null 2>&1 || die "docker not found"
 # QNAP Container Station ships Compose as the standalone `docker-compose`
 # (v2); newer Docker installs have the `docker compose` plugin. Accept both.
@@ -59,7 +77,7 @@ if docker compose version >/dev/null 2>&1; then
 elif command -v docker-compose >/dev/null 2>&1; then
 	compose() { docker-compose -p "$PROJECT" -f "$FILE" "$@"; }
 else
-	die "neither 'docker compose' nor 'docker-compose' found (export PATH=/share/Container/bin:\$PATH)"
+	die "neither 'docker compose' nor 'docker-compose' found (is Container Station running?)"
 fi
 
 # env_get KEY [FILE] — last value of KEY in an env file, without quotes.
@@ -155,7 +173,8 @@ preflight() {
 }
 
 backup() {
-	root=${1:-/share/Backup/sklad}
+	root=${1:-${SKLAD_BACKUP_DIR:-$DEFAULT_BACKUP_ROOT}}
+	on_ram_disk "$root" && die "$root is on the RAM disk (lost at reboot); use a folder under /share/CACHEDEV1_DATA/<share>/"
 	running "$APP" || die "$APP is not running; start it first (the backup is taken by the server binary)"
 	ts=$(date -u +%Y%m%dT%H%M%SZ)
 	out="$root/$ts"
@@ -243,7 +262,7 @@ rollback() {
 If the log says the database "was written by a newer Sklad version", the
 release you rolled back from changed the schema. Restore the backup that
 nas-deploy took before that deployment (see ./scripts/sklad-stack history):
-   ./scripts/sklad-stack restore-db /share/Backup/sklad/<pre-deploy time>/sklad.db
+   ./scripts/sklad-stack restore-db $DEFAULT_BACKUP_ROOT/<pre-deploy time>/sklad.db
 HELP
 	exit 1
 }

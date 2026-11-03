@@ -5,7 +5,7 @@
 #   ./scripts/push-test-to-nas David_Zitnik@10.77.10.2
 #   ./scripts/push-test-to-nas David_Zitnik@10.77.10.2 --keep-data
 #   ./scripts/push-test-to-nas David_Zitnik@10.77.10.2 --no-start
-#   ./scripts/push-test-to-nas David_Zitnik@10.77.10.2 --target /share/Container/sklad-test
+#   ./scripts/push-test-to-nas David_Zitnik@10.77.10.2 --target /share/CACHEDEV1_DATA/<share>/Container/sklad-test
 #
 # 1. uploads ./sklad-test to a staging folder next to the target
 # 2. on the NAS (scripts/nas-replace): removes the currently running test
@@ -22,7 +22,7 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 
 HOST=
-TARGET=/share/Container/sklad-test
+TARGET=/share/CACHEDEV1_DATA/Feasibility_NAS/Container/sklad-test
 REPLACE_ARGS=()
 while [ $# -gt 0 ]; do
 	case "$1" in

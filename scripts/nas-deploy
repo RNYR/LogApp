@@ -5,7 +5,7 @@
 # Installs or upgrades the LIVE Sklad stack from a freshly uploaded bundle,
 # never touching the data or CA volumes:
 #
-#   1. backs up the running database and CA to /share/Backup/sklad/<time>/
+#   1. backs up the running database and CA to <share>/Backup/sklad/<time>/
 #      (aborts the deployment when that fails)
 #   2. builds image sklad:<tag> from the bundle while the old release keeps
 #      serving (a failed build changes nothing)
@@ -26,7 +26,6 @@ TARGET=
 TAG=
 REBUILD=0
 START=1
-BACKUP_ROOT=${SKLAD_BACKUP_DIR:-/share/Backup/sklad}
 while [ $# -gt 0 ]; do
 	case "$1" in
 		--incoming) INCOMING=$2; shift 2 ;;
@@ -60,8 +59,24 @@ case "$TAG" in
 	local|test) die "tag '$TAG' is reserved; use a release number" ;;
 esac
 
-PATH=/share/Container/bin:/share/CACHEDEV1_DATA/.qpkg/container-station/bin:$PATH
+# Docker / Compose on QNAP Container Station. /share is a RAM disk rebuilt at
+# boot, so a symlink such as /share/Container/bin does not survive a reboot:
+# look in the Container Station package itself as well.
+CS=/share/CACHEDEV1_DATA/.qpkg/container-station
+PATH=$CS/bin:$CS/usr/bin:/share/Container/bin:$PATH
+if ! command -v docker-compose >/dev/null 2>&1; then
+	found=$(find "$CS" -maxdepth 6 -name docker-compose \( -type f -o -type l \) 2>/dev/null | head -n 1)
+	[ -z "$found" ] || PATH=$(dirname "$found"):$PATH
+fi
 export PATH
+
+# on_ram_disk DIR — true when DIR (or its nearest existing parent) is on tmpfs.
+# On QNAP only the shared folders under /share/CACHEDEV1_DATA survive a reboot.
+on_ram_disk() {
+	d=$1
+	while [ ! -d "$d" ] && [ "$d" != / ]; do d=$(dirname "$d"); done
+	[ "$(df -P "$d" 2>/dev/null | awk 'NR == 2 { print $1 }')" = tmpfs ]
+}
 command -v docker >/dev/null 2>&1 || die "docker not found"
 # QNAP ships the standalone `docker-compose`; elsewhere it is a docker plugin.
 if docker compose version >/dev/null 2>&1; then
@@ -71,6 +86,11 @@ elif command -v docker-compose >/dev/null 2>&1; then
 else
 	die "neither 'docker compose' nor 'docker-compose' found"
 fi
+
+# <share>/Container/sklad → backups in <share>/Backup/sklad (same disk-backed share).
+BACKUP_ROOT=${SKLAD_BACKUP_DIR:-$(dirname "$(dirname "$TARGET")")/Backup/sklad}
+on_ram_disk "$TARGET" && die "refusing target '$TARGET': it is on the RAM disk and would be wiped at the next reboot; use a shared folder, e.g. /share/CACHEDEV1_DATA/<share>/Container/sklad"
+on_ram_disk "$BACKUP_ROOT" && die "backup folder '$BACKUP_ROOT' is on the RAM disk; set SKLAD_BACKUP_DIR to a shared folder"
 
 PREVIOUS="$TARGET.previous"
 HISTORY="$(dirname "$TARGET")/.sklad-deploy-history"

@@ -3,13 +3,13 @@
 A checklist for the one-time switch on the QNAP. At the end the legacy
 `equipment-log` app is gone from the NAS — container, image, folder, data and
 mDNS file — and Sklad runs in its place as `https://sklad.local`. Only a
-private archive of the old app remains in `/share/Backup/sklad`.
+private archive of the old app remains in `/share/CACHEDEV1_DATA/Feasibility_NAS/Backup/sklad`.
 
 Background and the commands behind each step: [DEPLOY-QNAP.md](DEPLOY-QNAP.md).
 The Sklad test stack (`sklad-test`) is not touched by any step here.
 
 Placeholders: `<nas-ip>` = the NAS address, `<user>` = your NAS SSH account,
-`<tag>` = the release, e.g. `2.0.4`.
+`<tag>` = the release, e.g. `2.0.5`.
 
 ## 1. Before the day
 
@@ -34,11 +34,11 @@ git checkout v<tag>
 ```
 
 This is a first install, so the push only copies the files to
-`/share/Container/sklad`. On the NAS:
+`/share/CACHEDEV1_DATA/Feasibility_NAS/Container/sklad`. On the NAS:
 
 ```sh
-export PATH=/share/Container/bin:$PATH
-cd /share/Container/sklad
+export PATH=/share/CACHEDEV1_DATA/.qpkg/container-station/bin:$PATH
+cd /share/CACHEDEV1_DATA/Feasibility_NAS/Container/sklad
 cp .env.example .env && chmod 600 .env
 vi .env
 ```
@@ -69,7 +69,7 @@ name) — after the switch it has to point at the NAS again.
 ## 3. Switch (in the window)
 
 ```sh
-cd /share/Container/sklad
+cd /share/CACHEDEV1_DATA/Feasibility_NAS/Container/sklad
 ./scripts/nas-cutover go
 ```
 
@@ -77,7 +77,7 @@ It asks for confirmation, then:
 
 1. stops `equipment-log` (it stays installed, set not to restart);
 2. archives the whole legacy folder and mDNS file to
-   `/share/Backup/sklad/legacy-equipment-log-<time>.tar.gz` (mode 600; it
+   `/share/CACHEDEV1_DATA/Feasibility_NAS/Backup/sklad/legacy-equipment-log-<time>.tar.gz` (mode 600; it
    contains the old SMTP password);
 3. exports only `inventory.json` and `options.json` for the import;
 4. runs an import **dry run** and shows the counts — compare them with
@@ -134,15 +134,15 @@ It refuses while Sklad is unhealthy or before `go` has made the archive. After
       ([DEPLOY-QNAP.md §8](DEPLOY-QNAP.md#8-backups-and-restore)).
 - [ ] **Revoke the old Gmail app password** of the legacy notification account.
 - [ ] After a few weeks of normal use, delete the legacy archive in
-      `/share/Backup/sklad` (it holds that password and the old data).
+      `/share/CACHEDEV1_DATA/Feasibility_NAS/Backup/sklad` (it holds that password and the old data).
 
 ## Emergency: bring the old app back after `finish`
 
 Only from the archive, with Sklad stopped:
 
 ```sh
-cd /share/Container/sklad && ./scripts/sklad-stack down
-tar -xzf /share/Backup/sklad/legacy-equipment-log-<time>.tar.gz -C /
+cd /share/CACHEDEV1_DATA/Feasibility_NAS/Container/sklad && ./scripts/sklad-stack down
+tar -xzf /share/CACHEDEV1_DATA/Feasibility_NAS/Backup/sklad/legacy-equipment-log-<time>.tar.gz -C /
 cd <legacy folder shown by status> && docker-compose up -d --build
 ```
 

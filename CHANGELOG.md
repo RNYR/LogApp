@@ -5,6 +5,24 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.0.5] - 2026-11-03
+
+### Fixed
+
+- **Deployment survived no reboot.** On QNAP, `/share` is a RAM disk rebuilt at
+  boot; only shared folders under `/share/CACHEDEV1_DATA` persist. The scripts
+  installed to `/share/Container/sklad` and backed up to `/share/Backup/sklad`,
+  so a reboot wiped the release folder (scripts, Caddyfile, `.env`) and the
+  backups; Caddy then could not start. Defaults are now
+  `/share/CACHEDEV1_DATA/Feasibility_NAS/Container/sklad` (and `sklad-test`),
+  backups go to `<share>/Backup/sklad` next to the install, and `nas-deploy`,
+  `nas-replace` and `sklad-stack backup` refuse RAM-disk paths. Data in Docker
+  volumes was not affected.
+- The scripts find `docker-compose` inside the Container Station package when
+  the `/share/Container/bin` symlink is gone (it also lives on the RAM disk).
+- `nas-cutover finish` creates a fresh archive of the legacy app when the one
+  recorded by `go` is missing, before deleting anything.
+
 ## [2.0.4] - 2026-11-02
 
 ### Fixed

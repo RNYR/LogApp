@@ -33,7 +33,7 @@ cd /Users/v4rdr/MUNINN/work/sklad_revised
 1. removes the test stack that is currently running: containers
    `sklad-test-app`/`sklad-test-caddy`, image `sklad:test`, network
    `sklad_test` and the volumes `sklad_test_*` (test database and test CA);
-2. replaces `/share/Container/sklad-test` with the new files, keeping your
+2. replaces `/share/CACHEDEV1_DATA/Feasibility_NAS/Container/sklad-test` with the new files, keeping your
    `.env.test`;
 3. builds and starts the new version (`./scripts/test-stack up`).
 
@@ -47,10 +47,10 @@ once you have test data worth keeping); `--no-start` stops after step 2;
 If there was no `.env.test` yet, the push stops after copying and tells you to:
 
 ```sh
-cd /share/Container/sklad-test
+cd /share/CACHEDEV1_DATA/Feasibility_NAS/Container/sklad-test
 cp .env.test.example .env.test && chmod 600 .env.test
 vi .env.test       # SKLAD_TEST_LAN_IP=<nas-ip>, SKLAD_ADMIN_PASSWORD=<test password>
-export PATH=/share/Container/bin:$PATH
+export PATH=/share/CACHEDEV1_DATA/.qpkg/container-station/bin:$PATH
 ./scripts/test-stack up
 ```
 

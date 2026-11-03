@@ -18,10 +18,10 @@ Layout on the NAS:
 
 | Path / name | What |
 |---|---|
-| `/share/Container/sklad` | live release folder (`.env` lives here, mode 600) |
-| `/share/Container/sklad.previous` | the release before the last deployment (for `rollback`) |
-| `/share/Container/.sklad-deploy-history` | one line per deploy/rollback: tag, commit, backup folder |
-| `/share/Backup/sklad/<time>/` | backups made by `sklad-stack backup` (database + CA) |
+| `/share/CACHEDEV1_DATA/Feasibility_NAS/Container/sklad` | live release folder (`.env` lives here, mode 600) |
+| `/share/CACHEDEV1_DATA/Feasibility_NAS/Container/sklad.previous` | the release before the last deployment (for `rollback`) |
+| `/share/CACHEDEV1_DATA/Feasibility_NAS/Container/.sklad-deploy-history` | one line per deploy/rollback: tag, commit, backup folder |
+| `/share/CACHEDEV1_DATA/Feasibility_NAS/Backup/sklad/<time>/` | backups made by `sklad-stack backup` (database + CA) |
 | image `sklad:<tag>` | one image per release; the previous one stays for rollback |
 | volumes `sklad_sklad_data`, `sklad_caddy_data`, `sklad_caddy_config` | database + in-volume backups, Caddy CA. Never deleted by the scripts |
 | containers `sklad-app`, `sklad-caddy` | the running stack |
@@ -37,28 +37,38 @@ Compose is the standalone `docker-compose` (not the `docker compose` plugin)
 and is not on the SSH `PATH`; in every NAS shell:
 
 ```sh
-export PATH=/share/Container/bin:$PATH
+export PATH=/share/CACHEDEV1_DATA/.qpkg/container-station/bin:$PATH
 ```
 
-(The scripts set this themselves.) Choose a stable LAN IP and host name. Keep
+(The scripts set this themselves.)
+
+**Only shared folders survive a reboot.** On QNAP, `/share` itself is a small
+RAM disk that is rebuilt at every boot; the shared folders under it are links
+into `/share/CACHEDEV1_DATA/<share>`. Anything created directly in `/share` —
+for example `/share/Container/sklad` or `/share/Backup` — is wiped by the next
+reboot. Keep the release folder and the backups inside a shared folder (here
+`Feasibility_NAS`); `nas-deploy` and `sklad-stack backup` refuse RAM-disk paths.
+`df -P <path>` shows `tmpfs` for a RAM-disk path.
+
+Choose a stable LAN IP and host name. Keep
 access on the office LAN/VPN: anyone who can reach the app can make the
 permitted rental updates without login.
 
 ## 2. First install
 
 From the Mac, on a clean, committed checkout of the release (tag it first, e.g.
-`v2.0.4`; `make-bundle` refuses uncommitted changes):
+`v2.0.5`; `make-bundle` refuses uncommitted changes):
 
 ```sh
 ./scripts/make-bundle                         # writes ./sklad-release, tag from git describe
-./scripts/push-to-nas David_Zitnik@<nas-ip>   # uploads to /share/Container/sklad
+./scripts/push-to-nas David_Zitnik@<nas-ip>   # uploads to /share/CACHEDEV1_DATA/Feasibility_NAS/Container/sklad
 ```
 
 With no `.env` on the NAS yet, the push only copies the files and prints the next
 steps. On the NAS:
 
 ```sh
-cd /share/Container/sklad
+cd /share/CACHEDEV1_DATA/Feasibility_NAS/Container/sklad
 cp .env.example .env && chmod 600 .env
 vi .env
 ```
@@ -71,7 +81,7 @@ Set at least:
 - `SKLAD_LAN_IP` — the NAS address (certificate SAN and `default_sni`).
 - `SKLAD_HOST` / `SKLAD_HOST_ALT` — the names devices will use (default
   `sklad.local` / `sklad`).
-- `SKLAD_IMAGE_TAG` — the tag the push printed (e.g. `2.0.4`).
+- `SKLAD_IMAGE_TAG` — the tag the push printed (e.g. `2.0.5`).
 - `SKLAD_HSTS_MAX_AGE=0` until every device trusts the CA (the default in
   `.env.example`).
 - Ports: `80`/`443` by default. If QTS itself owns 443, use for example
@@ -124,13 +134,13 @@ legacy data. Rehearsal on the NAS:
 
 ```sh
 legacy=$(docker inspect equipment-log -f '{{range .Mounts}}{{.Source}}{{end}}')
-mkdir -p /share/Container/legacy-copy && cp -a "$legacy"/. /share/Container/legacy-copy/
-cd /share/Container/sklad-test
+mkdir -p /share/CACHEDEV1_DATA/Feasibility_NAS/Container/legacy-copy && cp -a "$legacy"/. /share/CACHEDEV1_DATA/Feasibility_NAS/Container/legacy-copy/
+cd /share/CACHEDEV1_DATA/Feasibility_NAS/Container/sklad-test
 ./scripts/test-stack compose stop test-app
 ./scripts/test-stack compose run --rm --no-deps --entrypoint import-json \
-  -v /share/Container/legacy-copy:/legacy:ro test-app --source /legacy --dry-run
+  -v /share/CACHEDEV1_DATA/Feasibility_NAS/Container/legacy-copy:/legacy:ro test-app --source /legacy --dry-run
 ./scripts/test-stack compose run --rm --no-deps --entrypoint import-json \
-  -v /share/Container/legacy-copy:/legacy:ro test-app --source /legacy
+  -v /share/CACHEDEV1_DATA/Feasibility_NAS/Container/legacy-copy:/legacy:ro test-app --source /legacy
 ./scripts/test-stack compose start test-app
 ```
 
@@ -147,7 +157,7 @@ driven by `scripts/nas-cutover`, which runs from the live folder:
 | Command | Does |
 |---|---|
 | `nas-cutover status` | shows the legacy container, folder, data (item count), mDNS file; changes nothing |
-| `nas-cutover go` | stops `equipment-log` (kept), archives it to `/share/Backup/sklad`, exports `inventory.json`/`options.json`, import dry run → confirm → import, `preflight`, starts Sklad, first backup |
+| `nas-cutover go` | stops `equipment-log` (kept), archives it to `/share/CACHEDEV1_DATA/Feasibility_NAS/Backup/sklad`, exports `inventory.json`/`options.json`, import dry run → confirm → import, `preflight`, starts Sklad, first backup |
 | `nas-cutover undo` | before `finish`: stops Sklad (data kept) and starts `equipment-log` again |
 | `nas-cutover finish` | deletes the legacy container, image, folder (with its data), installed `logapp.service` (replaced by `sklad.service`) and the exported copies; keeps the archive |
 
@@ -171,14 +181,14 @@ once, inside `go`; rehearse on the test stack (§3) beforehand.
 `nas-deploy` then, on the NAS:
 
 1. copies the live `.env` and `deploy/certs/*` into the new bundle;
-2. backs up the running database and CA to `/share/Backup/sklad/<time>/` —
+2. backs up the running database and CA to `/share/CACHEDEV1_DATA/Feasibility_NAS/Backup/sklad/<time>/` —
    if that fails, nothing changes;
 3. builds `sklad:<tag>` while the old release keeps serving — a failed build
    changes nothing;
-4. moves `/share/Container/sklad` to `sklad.previous`, puts the new release in
+4. moves `/share/CACHEDEV1_DATA/Feasibility_NAS/Container/sklad` to `sklad.previous`, puts the new release in
    place, sets `SKLAD_IMAGE_TAG=<tag>` in `.env`, recreates the containers and
    waits up to 3 minutes for both to be healthy;
-5. appends a line to `/share/Container/.sklad-deploy-history`.
+5. appends a line to `/share/CACHEDEV1_DATA/Feasibility_NAS/Container/.sklad-deploy-history`.
 
 Downtime is the container restart (seconds). The first start of a new release
 may run database migrations; after that an older image refuses the database
@@ -189,7 +199,7 @@ then: `./scripts/sklad-stack images`, then `docker image rm sklad:<old-tag>`.
 ## 6. Rollback
 
 ```sh
-cd /share/Container/sklad
+cd /share/CACHEDEV1_DATA/Feasibility_NAS/Container/sklad
 ./scripts/sklad-stack rollback
 ```
 
@@ -202,7 +212,7 @@ version"*. Then restore the backup `nas-deploy` took just before the upgrade
 (the `backup=` field in `./scripts/sklad-stack history`):
 
 ```sh
-./scripts/sklad-stack restore-db /share/Backup/sklad/<time>/sklad.db
+./scripts/sklad-stack restore-db /share/CACHEDEV1_DATA/Feasibility_NAS/Backup/sklad/<time>/sklad.db
 ```
 
 Rentals recorded between the upgrade and the restore are lost; note them before
@@ -243,17 +253,17 @@ These copies sit on the same disk as the database: they cover mistakes, not NAS
 failure.
 
 **Daily copy out of the volume, including the CA.** `sklad-stack backup` writes
-`/share/Backup/sklad/<time>/{sklad.db, caddy-pki.tar.gz, INFO}` (mode 600,
+`/share/CACHEDEV1_DATA/Feasibility_NAS/Backup/sklad/<time>/{sklad.db, caddy-pki.tar.gz, INFO}` (mode 600,
 newest 30 kept; `SKLAD_BACKUP_KEEP` changes that). Schedule it in QNAP's
 persistent crontab:
 
 ```sh
-echo '30 2 * * * /share/Container/sklad/scripts/sklad-stack backup /share/Backup/sklad >>/share/Backup/sklad/backup.log 2>&1' >> /etc/config/crontab
+echo '30 2 * * * /share/CACHEDEV1_DATA/Feasibility_NAS/Container/sklad/scripts/sklad-stack backup /share/CACHEDEV1_DATA/Feasibility_NAS/Backup/sklad >>/share/CACHEDEV1_DATA/Feasibility_NAS/Backup/sklad/backup.log 2>&1' >> /etc/config/crontab
 crontab /etc/config/crontab && /etc/init.d/crond.sh restart
 ```
 
 **Off the NAS.** Point a Hybrid Backup Sync 3 job (or rsync to another machine)
-at `/share/Backup/sklad`, daily, after 02:30, with alerts on failure; check
+at `/share/CACHEDEV1_DATA/Feasibility_NAS/Backup/sklad`, daily, after 02:30, with alerts on failure; check
 `backup.log` and the newest folder date weekly. The backups contain every table
 — accounts, personnel, audit log — and the CA private key: store them as
 sensitive data.
@@ -263,8 +273,8 @@ On demand (before risky changes): `./scripts/sklad-stack backup`.
 **Restore** a database or CA on the live stack:
 
 ```sh
-./scripts/sklad-stack restore-db /share/Backup/sklad/<time>/sklad.db
-./scripts/sklad-stack restore-ca /share/Backup/sklad/<time>/caddy-pki.tar.gz
+./scripts/sklad-stack restore-db /share/CACHEDEV1_DATA/Feasibility_NAS/Backup/sklad/<time>/sklad.db
+./scripts/sklad-stack restore-ca /share/CACHEDEV1_DATA/Feasibility_NAS/Backup/sklad/<time>/caddy-pki.tar.gz
 ```
 
 Both ask for confirmation, keep the replaced files and wait for health. Use a
@@ -276,11 +286,11 @@ a security recovery, follow §9 to revoke them.
 service is untouched:
 
 ```sh
-cd /share/Container/sklad-test
+cd /share/CACHEDEV1_DATA/Feasibility_NAS/Container/sklad-test
 ./scripts/test-stack compose stop test-app
 docker run --rm -i --entrypoint sh -v sklad_test_data:/data sklad:test \
   -c 'rm -f /data/sklad.db-wal /data/sklad.db-shm && cat > /data/sklad.db' \
-  < /share/Backup/sklad/<time>/sklad.db
+  < /share/CACHEDEV1_DATA/Feasibility_NAS/Backup/sklad/<time>/sklad.db
 ./scripts/test-stack compose start test-app
 ```
 
@@ -297,7 +307,7 @@ elevate an Editor. In a Bash shell on the NAS (the password is not echoed and
 not put in arguments):
 
 ```bash
-cd /share/Container/sklad
+cd /share/CACHEDEV1_DATA/Feasibility_NAS/Container/sklad
 ./scripts/sklad-stack compose stop app
 read -r -s -p 'Temporary Admin password (12–1024 bytes): ' recovery_password
 printf '\n'

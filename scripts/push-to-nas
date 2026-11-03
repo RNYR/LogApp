@@ -5,7 +5,7 @@
 #   ./scripts/push-to-nas David_Zitnik@<nas-ip>
 #   ./scripts/push-to-nas David_Zitnik@<nas-ip> --no-start
 #   ./scripts/push-to-nas David_Zitnik@<nas-ip> --rebuild    # same tag again
-#   ./scripts/push-to-nas David_Zitnik@<nas-ip> --target /share/Container/sklad
+#   ./scripts/push-to-nas David_Zitnik@<nas-ip> --target /share/CACHEDEV1_DATA/<share>/Container/sklad
 #
 # 1. uploads ./sklad-release to a staging folder next to the target
 # 2. on the NAS (scripts/nas-deploy): backs up the running database and CA,
@@ -21,7 +21,7 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 
 HOST=
-TARGET=/share/Container/sklad
+TARGET=/share/CACHEDEV1_DATA/Feasibility_NAS/Container/sklad
 DEPLOY_ARGS=()
 while [ $# -gt 0 ]; do
 	case "$1" in

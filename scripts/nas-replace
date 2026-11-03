@@ -43,8 +43,25 @@ esac
 
 # Docker / compose locations on QNAP Container Station (non-login SSH shells
 # do not always have them on PATH).
-PATH=/share/Container/bin:/share/CACHEDEV1_DATA/.qpkg/container-station/bin:$PATH
+# Docker / Compose on QNAP Container Station. /share is a RAM disk rebuilt at
+# boot, so a symlink such as /share/Container/bin does not survive a reboot:
+# look in the Container Station package itself as well.
+CS=/share/CACHEDEV1_DATA/.qpkg/container-station
+PATH=$CS/bin:$CS/usr/bin:/share/Container/bin:$PATH
+if ! command -v docker-compose >/dev/null 2>&1; then
+	found=$(find "$CS" -maxdepth 6 -name docker-compose \( -type f -o -type l \) 2>/dev/null | head -n 1)
+	[ -z "$found" ] || PATH=$(dirname "$found"):$PATH
+fi
 export PATH
+
+# on_ram_disk DIR — true when DIR (or its nearest existing parent) is on tmpfs.
+# On QNAP only the shared folders under /share/CACHEDEV1_DATA survive a reboot.
+on_ram_disk() {
+	d=$1
+	while [ ! -d "$d" ] && [ "$d" != / ]; do d=$(dirname "$d"); done
+	[ "$(df -P "$d" 2>/dev/null | awk 'NR == 2 { print $1 }')" = tmpfs ]
+}
+on_ram_disk "$TARGET" && die "refusing target '$TARGET': it is on the RAM disk and would be wiped at the next reboot; use /share/CACHEDEV1_DATA/<share>/Container/sklad-test"
 command -v docker >/dev/null 2>&1 || die "docker not found"
 
 echo "== Removing the current test stack"
