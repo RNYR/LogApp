@@ -5,6 +5,26 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.0.7] - 2026-11-03
+
+### Added
+
+- **Discord rental alerts.** New switch "Post rental changes" in Admin →
+  Settings (`discord.rental_alerts`, off by default, needs "Enabled"). Every
+  save that starts or changes a rental — a status other than Feasibility, or
+  edited dates, note or renter on a rented item — posts one message to the
+  existing webhook with asset ID, name, old → new status, renter, dates, note
+  and who saved it. A bulk save is one message; returns and item-record edits
+  are not posted. Delivery runs in the background after the save commits and
+  is listed in the delivery log (trigger `rental`).
+
+### Fixed
+
+- The overdue report's per-item/per-day dedupe now only counts overdue
+  deliveries, so a rental message can never hide an item from that day's
+  overdue report.
+- The delivery log shows readable trigger names.
+
 ## [2.0.6] - 2026-11-03
 
 ### Fixed

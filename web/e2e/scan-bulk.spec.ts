@@ -46,7 +46,7 @@ const ITEM = {
 
 /** Settings fixture for the admin settings screen. */
 const SETTINGS = {
-  discord: { webhook_set: false, webhook_preview: '', enabled: false },
+  discord: { webhook_set: false, webhook_preview: '', enabled: false, rental_alerts: false },
   scheduler: { check_hour: 11, days_ahead: 0 },
   locale: { default: 'en' },
   general: { organization_name: 'Sklad Test Org' },
@@ -374,6 +374,26 @@ test.describe('scan → buffer → bulk', () => {
     await expect(remove).toHaveCSS('outline-style', 'solid')
     await expect(remove).toHaveCSS('outline-width', '2px')
     await expect(remove).toHaveCSS('outline-offset', '2px')
+  })
+})
+
+test.describe('settings', () => {
+  test.beforeEach(async ({ page }) => {
+    await useEnglish(page)
+    await mockApi(page)
+  })
+
+  test('saves the rental-alerts switch with the Discord settings', async ({ page }) => {
+    await page.goto('/settings')
+    const rentalAlerts = page.getByLabel('Post rental changes')
+    await expect(rentalAlerts).not.toBeChecked()
+    await rentalAlerts.check()
+    const putRequest = page.waitForRequest(
+      (request) => request.method() === 'PUT' && new URL(request.url()).pathname === '/api/v1/settings',
+    )
+    await page.getByRole('button', { name: 'Save settings' }).click()
+    const body = (await putRequest).postDataJSON() as { discord: { enabled: boolean; rental_alerts: boolean } }
+    expect(body.discord).toEqual({ enabled: false, rental_alerts: true })
   })
 })
 

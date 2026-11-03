@@ -1050,6 +1050,7 @@ components:
                 webhook_set: { type: boolean }
                 webhook_preview: { type: string }
                 enabled: { type: boolean }
+                rental_alerts: { type: boolean, description: Post every rental change (needs enabled) }
             scheduler:
               type: object
               properties:
@@ -1072,6 +1073,7 @@ components:
           properties:
             webhook_url: { type: string, description: Empty string = keep existing }
             enabled: { type: boolean }
+            rental_alerts: { type: boolean }
         scheduler:
           type: object
           properties:
@@ -1091,7 +1093,7 @@ components:
       properties:
         id: { type: integer }
         channel_id: { type: integer }
-        trigger: { type: string, enum: [overdue_daily, manual, test] }
+        trigger: { type: string, enum: [overdue_daily, manual, test, rental] }
         status: { type: string, enum: [pending, sent, failed] }
         item_count: { type: integer }
         error: { type: string, nullable: true }

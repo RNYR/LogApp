@@ -51,6 +51,7 @@ const (
 	colorOverdue  = 0xE74C3C
 	colorManual   = 0xE67E22
 	colorTest     = 0x3498DB
+	colorRental   = 0x2ECC71
 	colorFallback = 0x5865F2
 )
 
@@ -370,8 +371,13 @@ func itemEmbed(item Item, l labels, appURL string) embed {
 		})
 	}
 
+	status := item.Status
+	if previous := strings.TrimSpace(item.PreviousStatus); previous != "" && !strings.EqualFold(previous, status) {
+		status = previous + " → " + status
+	}
 	addField(l.FieldType, item.Type, true)
-	addField(l.FieldStatus, item.Status, true)
+	addField(l.FieldStatus, status, true)
+	addField(l.FieldRenter, item.Renter, true)
 	addField(l.FieldSN, item.SN, true)
 	addField(l.FieldSent, item.SentDate, true)
 	addField(l.FieldReturn, item.ReturnDate, true)
@@ -448,6 +454,8 @@ func kindColor(kind Kind) int {
 		return colorManual
 	case KindTest:
 		return colorTest
+	case KindRental:
+		return colorRental
 	default:
 		return colorFallback
 	}

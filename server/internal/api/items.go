@@ -22,6 +22,7 @@ import (
 
 	"sklad/server/internal/audit"
 	"sklad/server/internal/auth"
+	"sklad/server/internal/jobs"
 )
 
 // Field limits. They mirror what the legacy app accepted while keeping a single
@@ -875,13 +876,17 @@ func (a *API) writeItem(w http.ResponseWriter, r *http.Request, replace bool) {
 	}
 
 	locale := requestLocale(r)
-	var updated Item
+	var (
+		updated Item
+		before  itemState
+	)
 
 	err = a.withTx(r.Context(), func(tx *sql.Tx) error {
 		st, err := a.loadItemState(r.Context(), tx, id)
 		if err != nil {
 			return err
 		}
+		before = st
 		if st.Version != *body.Version {
 			return &versionConflictError{entity: "item", ref: st.AssetTag, expected: *body.Version, current: st.Version}
 		}
@@ -904,6 +909,9 @@ func (a *API) writeItem(w http.ResponseWriter, r *http.Request, replace bool) {
 	if err != nil {
 		a.writeItemError(w, r, err)
 		return
+	}
+	if change, ok := rentalChange(before, updated); ok {
+		a.announceRentals(r, []jobs.RentalChange{change})
 	}
 	writeData(w, http.StatusOK, updated)
 }

@@ -282,6 +282,8 @@ export interface Settings {
       webhook_set: boolean
       webhook_preview: string
       enabled: boolean
+      /** Post every rental change to the same webhook (needs `enabled`). */
+      rental_alerts: boolean
     }
     scheduler: {
       check_hour: number
@@ -303,6 +305,7 @@ export interface SettingsUpdate {
     /** Remove the stored webhook (additive contract field). */
     clear_webhook?: boolean
     enabled?: boolean
+    rental_alerts?: boolean
   }
   scheduler?: {
     check_hour?: number

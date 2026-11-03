@@ -197,6 +197,8 @@
     "webhook": "Webhook URL",
     "webhookHint": "Paste the Discord channel webhook URL.",
     "enabled": "Enabled",
+    "rentalAlerts": "Post rental changes",
+    "rentalAlertsHint": "One message whenever a rental is started or changed (status other than Feasibility, or edited dates, note or renter). Needs “Enabled”.",
     "checkHour": "Daily check hour",
     "daysAhead": "Days ahead",
     "daysAheadHint": "Also report items due within this many days (0 = overdue only).",
@@ -212,7 +214,13 @@
     "notifyNowDone": "Overdue check completed.",
     "deliveryLog": "Delivery log",
     "webhookSet": "Webhook configured",
-    "webhookNotSet": "No webhook configured"
+    "webhookNotSet": "No webhook configured",
+    "trigger": {
+      "overdue_daily": "Daily overdue check",
+      "manual": "Manual overdue check",
+      "test": "Test message",
+      "rental": "Rental change"
+    }
   },
   "options": {
     "title": "Manage options",

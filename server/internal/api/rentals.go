@@ -11,7 +11,78 @@ import (
 	"strings"
 
 	"sklad/server/internal/auth"
+	"sklad/server/internal/jobs"
 )
+
+// RentalAnnouncer posts the rental changes of one save. It must not block: the
+// save has already committed. *jobs.Scheduler implements it.
+type RentalAnnouncer interface {
+	AnnounceRentals(changes []jobs.RentalChange, actor string)
+}
+
+// rentalChange reports whether a save started or changed a rental: the item is
+// in a status other than Feasibility afterwards, and its status, renter,
+// dates or note changed. A return (→ Feasibility) and Admin edits of the
+// item record itself (name, SN, type) are not announced.
+func rentalChange(before itemState, after Item) (jobs.RentalChange, bool) {
+	status := deref(after.Status)
+	if status == "" || strings.EqualFold(status, "Feasibility") {
+		return jobs.RentalChange{}, false
+	}
+	previous := deref(before.Status)
+	changed := previous != status ||
+		!sameID(before.PersonnelID, after.PersonnelID) ||
+		deref(nullString(before.SentDate)) != deref(after.SentDate) ||
+		deref(nullString(before.ReturnDate)) != deref(after.ReturnDate) ||
+		before.Note != after.Note
+	if !changed {
+		return jobs.RentalChange{}, false
+	}
+	itemType := deref(after.TypeLabel)
+	if itemType == "" {
+		itemType = deref(after.Type)
+	}
+	return jobs.RentalChange{
+		AssetTag:       after.AssetTag,
+		Name:           after.Name,
+		SN:             after.SN,
+		Type:           itemType,
+		PreviousStatus: previous,
+		Status:         status,
+		StatusColor:    deref(after.StatusColor),
+		Renter:         deref(after.PersonnelName),
+		SentDate:       deref(after.SentDate),
+		ReturnDate:     deref(after.ReturnDate),
+		Note:           after.Note,
+	}, true
+}
+
+// announceRentals hands the rental changes of a committed save to the
+// announcer, attributed to the signed-in Admin or the anonymous Editor.
+func (a *API) announceRentals(r *http.Request, changes []jobs.RentalChange) {
+	if a.rentals == nil || len(changes) == 0 {
+		return
+	}
+	actor := ""
+	if u := auth.UserFrom(r.Context()); u != nil {
+		actor = u.Username
+	}
+	a.rentals.AnnounceRentals(changes, actor)
+}
+
+func sameID(before sql.NullInt64, after *int64) bool {
+	if !before.Valid || after == nil {
+		return !before.Valid && after == nil
+	}
+	return before.Int64 == *after
+}
+
+func deref(value *string) string {
+	if value == nil {
+		return ""
+	}
+	return *value
+}
 
 func isAdmin(r *http.Request) bool {
 	u := auth.UserFrom(r.Context())

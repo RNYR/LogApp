@@ -710,3 +710,49 @@ func TestDiscordMessageIDsAndErrorsAreJoined(t *testing.T) {
 		t.Fatalf("a 403 from Discord is a permanent failure: %v", err)
 	}
 }
+
+func TestRentalReportShowsChangeRenterAndActor(t *testing.T) {
+	report := Report{
+		Kind: KindRental,
+		Items: []Item{{
+			AssetTag: "PV-001", Name: "Camera A", Type: "Camera", PreviousStatus: "Feasibility", Status: "Loaned",
+			Renter: "Office colleague", SentDate: "2026-03-15", ReturnDate: "2026-03-20", Note: "Trade fair",
+		}},
+		Locale: "en",
+	}
+	embeds := buildEmbeds(report, testClock())
+	if len(embeds) != 2 {
+		t.Fatalf("expected a summary and one item embed, got %d", len(embeds))
+	}
+	if embeds[0].Title != "Sklad — rental: PV-001" || !strings.Contains(embeds[0].Description, "Changed by: Editor (no sign-in)") {
+		t.Fatalf("unexpected summary: %+v", embeds[0])
+	}
+	if embeds[0].Color != colorRental {
+		t.Fatalf("rental summary colour = %#x", embeds[0].Color)
+	}
+	fields := map[string]string{}
+	for _, field := range embeds[1].Fields {
+		fields[field.Name] = field.Value
+	}
+	for name, want := range map[string]string{
+		"Status": "Feasibility → Loaned", "Rented to": "Office colleague", "Sent": "2026-03-15",
+		"Return by": "2026-03-20", "Note": "Trade fair",
+	} {
+		if fields[name] != want {
+			t.Fatalf("field %q = %q, want %q (all: %v)", name, fields[name], want, fields)
+		}
+	}
+
+	// An unchanged status (e.g. a note edit) shows just the status; an Admin is named.
+	report.Items[0].PreviousStatus = "Loaned"
+	report.Actor = "admin"
+	embeds = buildEmbeds(report, testClock())
+	if !strings.Contains(embeds[0].Description, "Changed by: admin") {
+		t.Fatalf("actor missing: %q", embeds[0].Description)
+	}
+	for _, field := range embeds[1].Fields {
+		if field.Name == "Status" && field.Value != "Loaned" {
+			t.Fatalf("status = %q, want plain Loaned", field.Value)
+		}
+	}
+}

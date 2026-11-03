@@ -51,6 +51,9 @@ type Options struct {
 	// Scheduler runs the overdue notification check on demand (the manual
 	// "run now" endpoint). When nil, that endpoint reports 503.
 	Scheduler OverdueRunner
+	// Rentals posts rental changes to Discord after a save. When nil, rental
+	// alerts are off.
+	Rentals RentalAnnouncer
 	// DB is the SQLite pool backing the domain endpoints (items, options,
 	// export). When nil, the domain routes are not mounted.
 	DB *sql.DB
@@ -73,6 +76,7 @@ type API struct {
 	db        *sql.DB
 	now       func() time.Time
 	scheduler OverdueRunner
+	rentals   RentalAnnouncer
 }
 
 // New builds an API instance. Config is required; a nil logger is replaced by a
@@ -114,6 +118,7 @@ func New(opts Options) *API {
 		db:        opts.DB,
 		now:       now,
 		scheduler: opts.Scheduler,
+		rentals:   opts.Rentals,
 	}
 	return a
 }

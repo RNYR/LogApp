@@ -90,6 +90,8 @@ type Options struct {
 	MaxItems int
 	// RunTimeout bounds one check (0 selects DefaultRunTimeout).
 	RunTimeout time.Duration
+	// RentalTimeout bounds one rental delivery (0 selects DefaultRentalTimeout).
+	RentalTimeout time.Duration
 	// Notifier builds the delivery client for a webhook URL; nil selects
 	// notify.NewDiscord. Tests inject a recording implementation.
 	Notifier func(webhookURL string) (notify.Notifier, error)
@@ -107,6 +109,10 @@ type Scheduler struct {
 	maxItems   int
 	runTimeout time.Duration
 	notifier   func(webhookURL string) (notify.Notifier, error)
+
+	// background tracks rental deliveries started by AnnounceRentals.
+	background    sync.WaitGroup
+	rentalTimeout time.Duration
 
 	// mu serializes runs; lastRun* remember what the loop already decided today
 	// so the minute-by-minute check does not re-query the database.
@@ -144,6 +150,10 @@ func New(opts Options) (*Scheduler, error) {
 	if runTimeout <= 0 {
 		runTimeout = DefaultRunTimeout
 	}
+	rentalTimeout := opts.RentalTimeout
+	if rentalTimeout <= 0 {
+		rentalTimeout = DefaultRentalTimeout
+	}
 	notifier := opts.Notifier
 	if notifier == nil {
 		notifier = func(webhookURL string) (notify.Notifier, error) {
@@ -151,16 +161,17 @@ func New(opts Options) (*Scheduler, error) {
 		}
 	}
 	return &Scheduler{
-		db:         opts.DB,
-		log:        log,
-		audit:      opts.Audit,
-		loc:        location,
-		appURL:     opts.AppURL,
-		now:        now,
-		tick:       tick,
-		maxItems:   maxItems,
-		runTimeout: runTimeout,
-		notifier:   notifier,
+		db:            opts.DB,
+		log:           log,
+		audit:         opts.Audit,
+		loc:           location,
+		appURL:        opts.AppURL,
+		now:           now,
+		tick:          tick,
+		maxItems:      maxItems,
+		runTimeout:    runTimeout,
+		rentalTimeout: rentalTimeout,
+		notifier:      notifier,
 	}, nil
 }
 
@@ -514,15 +525,17 @@ func (s *Scheduler) dueItems(ctx context.Context, current settings.Settings, tod
 }
 
 // notifiedToday returns the asset tags already reported by a successful
-// delivery that started on the same local calendar day. This is the
-// per-item/per-day dedupe.
+// overdue delivery (scheduled or manual) that started on the same local
+// calendar day. This is the per-item/per-day dedupe. Rental alerts are events,
+// not reminders, so they must not hide an item from that day's overdue report.
 func (s *Scheduler) notifiedToday(ctx context.Context, now time.Time) (map[string]struct{}, error) {
 	start := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, s.loc)
 	end := start.AddDate(0, 0, 1)
 
 	rows, err := s.db.QueryContext(ctx, `SELECT payload FROM notification_deliveries
-		WHERE status = ? AND created_at >= ? AND created_at < ?`,
-		statusSent, start.UTC().Format(time.RFC3339), end.UTC().Format(time.RFC3339))
+		WHERE status = ? AND trigger IN (?, ?) AND created_at >= ? AND created_at < ?`,
+		statusSent, string(notify.KindOverdueDaily), string(notify.KindManual),
+		start.UTC().Format(time.RFC3339), end.UTC().Format(time.RFC3339))
 	if err != nil {
 		return nil, fmt.Errorf("jobs: query today's deliveries: %w", err)
 	}

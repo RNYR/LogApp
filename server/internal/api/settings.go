@@ -38,6 +38,7 @@ type discordSettings struct {
 	WebhookSet     bool   `json:"webhook_set"`
 	WebhookPreview string `json:"webhook_preview"`
 	Enabled        bool   `json:"enabled"`
+	RentalAlerts   bool   `json:"rental_alerts"`
 }
 
 type schedulerSettings struct {
@@ -80,6 +81,7 @@ type discordSettingsUpdate struct {
 	// sending it together with a non-empty webhook_url is a validation error.
 	ClearWebhook bool  `json:"clear_webhook"`
 	Enabled      *bool `json:"enabled"`
+	RentalAlerts *bool `json:"rental_alerts"`
 }
 
 type schedulerSettingsUpdate struct {
@@ -258,6 +260,9 @@ func applySettingsUpdate(target *settings.Settings, body settingsUpdateRequest) 
 		if body.Discord.Enabled != nil {
 			target.DiscordEnabled = *body.Discord.Enabled
 		}
+		if body.Discord.RentalAlerts != nil {
+			target.RentalAlerts = *body.Discord.RentalAlerts
+		}
 	}
 	if body.Scheduler != nil {
 		if body.Scheduler.CheckHour != nil {
@@ -283,6 +288,7 @@ func settingsDTO(current settings.Settings) settingsResponse {
 			WebhookSet:     current.WebhookConfigured(),
 			WebhookPreview: notify.MaskWebhook(current.DiscordWebhookURL),
 			Enabled:        current.DiscordEnabled,
+			RentalAlerts:   current.RentalAlerts,
 		},
 		Scheduler: schedulerSettings{
 			CheckHour: current.CheckHour,

@@ -20,6 +20,7 @@ import (
 const (
 	KeyDiscordWebhookURL  = "discord.webhook_url"
 	KeyDiscordEnabled     = "discord.enabled"
+	KeyDiscordRentals     = "discord.rental_alerts"
 	KeySchedulerCheckHour = "scheduler.check_hour"
 	KeySchedulerDaysAhead = "scheduler.days_ahead"
 	KeyLocaleDefault      = "locale.default"
@@ -61,10 +62,14 @@ type Execer interface {
 type Settings struct {
 	DiscordWebhookURL string
 	DiscordEnabled    bool
-	CheckHour         int
-	DaysAhead         int
-	DefaultLocale     string
-	OrganizationName  string
+	// RentalAlerts posts every rental change (a status other than Feasibility,
+	// or edited dates, note or renter on a rented item) to the same webhook.
+	// Like the overdue report it only runs while DiscordEnabled is on.
+	RentalAlerts     bool
+	CheckHour        int
+	DaysAhead        int
+	DefaultLocale    string
+	OrganizationName string
 
 	// Problems lists keys whose stored value could not be decoded; the loader
 	// falls back to the default so a corrupt row can still be repaired through
@@ -116,6 +121,8 @@ func (s *Settings) apply(key, value string) error {
 		return json.Unmarshal([]byte(value), &s.DiscordWebhookURL)
 	case KeyDiscordEnabled:
 		return json.Unmarshal([]byte(value), &s.DiscordEnabled)
+	case KeyDiscordRentals:
+		return json.Unmarshal([]byte(value), &s.RentalAlerts)
 	case KeySchedulerCheckHour:
 		return json.Unmarshal([]byte(value), &s.CheckHour)
 	case KeySchedulerDaysAhead:
@@ -143,6 +150,7 @@ func Save(ctx context.Context, tx Execer, s Settings, updatedBy *int64) error {
 	values := map[string]any{
 		KeyDiscordWebhookURL:  s.DiscordWebhookURL,
 		KeyDiscordEnabled:     s.DiscordEnabled,
+		KeyDiscordRentals:     s.RentalAlerts,
 		KeySchedulerCheckHour: s.CheckHour,
 		KeySchedulerDaysAhead: s.DaysAhead,
 		KeyLocaleDefault:      s.DefaultLocale,
@@ -170,6 +178,7 @@ func keys() []string {
 	return []string{
 		KeyDiscordWebhookURL,
 		KeyDiscordEnabled,
+		KeyDiscordRentals,
 		KeySchedulerCheckHour,
 		KeySchedulerDaysAhead,
 		KeyLocaleDefault,

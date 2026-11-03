@@ -49,6 +49,7 @@ These are editable in the admin UI (`GET/PUT /api/v1/settings`) and override def
 |----------------------------|--------|---------|----------------------------------------------------|
 | `discord.webhook_url`      | string | `""`    | Discord webhook URL (secret; masked in API responses) |
 | `discord.enabled`          | bool   | `false` | Master switch for Discord alerts                   |
+| `discord.rental_alerts`    | bool   | `false` | Post every rental change (needs `discord.enabled`) |
 | `scheduler.check_hour`     | int    | `11`    | Local hour 0–23 for the daily overdue run          |
 | `scheduler.days_ahead`     | int    | `0`     | Report items due within N days (0 = overdue only)  |
 | `locale.default`           | string | `en`    | `en` \| `cs` \| `it`                               |

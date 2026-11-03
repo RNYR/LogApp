@@ -154,7 +154,7 @@ CREATE TABLE notification_channels (
 CREATE TABLE notification_deliveries (
     id              INTEGER PRIMARY KEY AUTOINCREMENT,
     channel_id      INTEGER NOT NULL REFERENCES notification_channels(id) ON DELETE CASCADE,
-    trigger         TEXT    NOT NULL,      -- overdue_daily | manual | test
+    trigger         TEXT    NOT NULL,      -- overdue_daily | manual | test | rental
     status          TEXT    NOT NULL,      -- pending | sent | failed
     idempotency_key TEXT    NOT NULL UNIQUE,
     item_count      INTEGER NOT NULL DEFAULT 0,
@@ -186,6 +186,7 @@ CREATE INDEX idx_scan_created ON scan_events(created_at);
 |----------------------------|---------|------------------------|----------------------------------------------|
 | `discord.webhook_url`      | string  | `""`                   | Discord webhook URL (secret; masked in API)  |
 | `discord.enabled`          | bool    | `false`                | Master switch for Discord alerts             |
+| `discord.rental_alerts`    | bool    | `false`                | Post rental changes (needs discord.enabled)  |
 | `scheduler.check_hour`     | int     | `11`                   | Local hour 0–23 for the daily overdue run    |
 | `scheduler.days_ahead`     | int     | `0`                    | Include items due within N days (0 = overdue only) |
 | `locale.default`           | string  | `en`                   | `en` \| `cs` \| `it`                         |

@@ -1372,6 +1372,8 @@ export interface components {
                     webhook_set?: boolean;
                     webhook_preview?: string;
                     enabled?: boolean;
+                    /** @description Post every rental change (needs enabled) */
+                    rental_alerts?: boolean;
                 };
                 scheduler?: {
                     check_hour?: number;
@@ -1391,6 +1393,7 @@ export interface components {
                 /** @description Empty string = keep existing */
                 webhook_url?: string;
                 enabled?: boolean;
+                rental_alerts?: boolean;
             };
             scheduler?: {
                 check_hour?: number;
@@ -1408,7 +1411,7 @@ export interface components {
             id?: number;
             channel_id?: number;
             /** @enum {string} */
-            trigger?: "overdue_daily" | "manual" | "test";
+            trigger?: "overdue_daily" | "manual" | "test" | "rental";
             /** @enum {string} */
             status?: "pending" | "sent" | "failed";
             item_count?: number;

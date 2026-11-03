@@ -40,6 +40,7 @@ type envConfig struct {
 	dbPath    string
 	now       time.Time
 	scheduler func(*sql.DB) OverdueRunner
+	rentals   RentalAnnouncer
 	location  *time.Location
 }
 
@@ -59,6 +60,11 @@ func withNow(instant time.Time) envOption {
 // withScheduler wires a real (or stub) overdue runner for the notification API.
 func withScheduler(factory func(*sql.DB) OverdueRunner) envOption {
 	return func(c *envConfig) { c.scheduler = factory }
+}
+
+// withRentals wires a rental announcer (rental Discord alerts).
+func withRentals(announcer RentalAnnouncer) envOption {
+	return func(c *envConfig) { c.rentals = announcer }
 }
 
 // testEnv is one isolated deployment: database, API and a logged-in admin.
@@ -143,6 +149,7 @@ func newTestEnv(t *testing.T, opts ...envOption) *testEnv {
 	if cfg.scheduler != nil {
 		options.Scheduler = cfg.scheduler(database.DB())
 	}
+	options.Rentals = cfg.rentals
 
 	instance := New(options)
 	server := httptest.NewServer(instance.Handler())

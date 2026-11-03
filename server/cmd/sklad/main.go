@@ -38,6 +38,8 @@ const (
 	idleTimeout       = 120 * time.Second
 	maxHeaderBytes    = 1 << 20
 	shutdownTimeout   = 15 * time.Second
+	// rentalDrainTimeout leaves room inside the 20 s compose stop grace period.
+	rentalDrainTimeout = 4 * time.Second
 )
 
 func main() {
@@ -146,6 +148,13 @@ func run() error {
 		return fmt.Errorf("scheduler: %w", err)
 	}
 	go scheduler.Start(ctx)
+	// Rental alerts posted by the last requests finish before the database
+	// closes (bounded, so a dead webhook cannot hold up the container stop).
+	defer func() {
+		if !scheduler.Drain(rentalDrainTimeout) {
+			log.Warn("rental notifications still in flight at shutdown")
+		}
+	}()
 	backupCtx, cancelBackups := context.WithCancel(ctx)
 	backupsDone := make(chan struct{})
 	go func() { defer close(backupsDone); jobs.StartBackups(backupCtx, database, log, backupInterval) }()
@@ -174,6 +183,7 @@ func run() error {
 		Audit:     auditWriter,
 		DB:        database.DB(),
 		Scheduler: scheduler,
+		Rentals:   scheduler,
 	}).Handler()
 
 	server := &http.Server{

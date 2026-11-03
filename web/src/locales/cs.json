@@ -197,6 +197,8 @@
     "webhook": "URL webhooku",
     "webhookHint": "Vložte URL webhooku kanálu Discord.",
     "enabled": "Zapnuto",
+    "rentalAlerts": "Posílat změny výpůjček",
+    "rentalAlertsHint": "Zpráva při každém zahájení nebo změně výpůjčky (jiný stav než Feasibility nebo upravené datum, poznámka či komu je půjčeno). Vyžaduje „Zapnuto“.",
     "checkHour": "Hodina denní kontroly",
     "daysAhead": "Dny dopředu",
     "daysAheadHint": "Upozorňovat i na položky s termínem v následujících dnech (0 = pouze po termínu).",
@@ -212,7 +214,13 @@
     "notifyNowDone": "Kontrola termínů dokončena.",
     "deliveryLog": "Protokol doručení",
     "webhookSet": "Webhook je nastaven",
-    "webhookNotSet": "Webhook není nastaven"
+    "webhookNotSet": "Webhook není nastaven",
+    "trigger": {
+      "overdue_daily": "Denní kontrola po termínu",
+      "manual": "Ruční kontrola po termínu",
+      "test": "Testovací zpráva",
+      "rental": "Změna výpůjčky"
+    }
   },
   "options": {
     "title": "Správa možností",

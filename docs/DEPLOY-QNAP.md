@@ -57,7 +57,7 @@ permitted rental updates without login.
 ## 2. First install
 
 From the Mac, on a clean, committed checkout of the release (tag it first, e.g.
-`v2.0.6`; `make-bundle` refuses uncommitted changes):
+`v2.0.7`; `make-bundle` refuses uncommitted changes):
 
 ```sh
 ./scripts/make-bundle                         # writes ./sklad-release, tag from git describe
@@ -81,7 +81,7 @@ Set at least:
 - `SKLAD_LAN_IP` — the NAS address (certificate SAN and `default_sni`).
 - `SKLAD_HOST` / `SKLAD_HOST_ALT` — the names devices will use (default
   `sklad.local` / `sklad`).
-- `SKLAD_IMAGE_TAG` — the tag the push printed (e.g. `2.0.6`).
+- `SKLAD_IMAGE_TAG` — the tag the push printed (e.g. `2.0.7`).
 - `SKLAD_HSTS_MAX_AGE=0` until every device trusts the CA (the default in
   `.env.example`).
 - Ports: `80`/`443` by default. If QTS itself owns 443, use for example
@@ -334,6 +334,16 @@ test message or manual overdue run works while automatic alerts are disabled.
 Verify delivery, timezone and duplicate suppression. Feasibility items must
 never be included, even with a past return date. Test the loan → physical
 return confirmation → overdue check sequence.
+
+**Rental changes** ("Post rental changes", needs "Enabled"): every save that
+starts or changes a rental posts one message to the same webhook — a status
+other than Feasibility, or edited dates, note or renter on a rented item. It
+shows the asset ID, name, old → new status, renter, dates, note and who saved
+it (an Admin username, or "Editor" for the anonymous rental mode). A bulk save
+is one message. Returns (→ Feasibility) and edits of the item record itself are
+not posted. Delivery happens in the background, so Discord being slow or down
+never blocks a rental; failures appear in the delivery log (trigger
+`rental`).
 
 ## 11. Acceptance checklist (test stack, then live)
 

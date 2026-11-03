@@ -16,6 +16,7 @@ import (
 
 	"sklad/server/internal/audit"
 	"sklad/server/internal/auth"
+	"sklad/server/internal/jobs"
 )
 
 // bulkItemRef identifies one buffered item and the version the client saw.
@@ -81,10 +82,14 @@ func (a *API) handleBulkUpdate(w http.ResponseWriter, r *http.Request) {
 	}
 
 	locale := requestLocale(r)
-	var updated []Item
+	var (
+		updated []Item
+		rentals []jobs.RentalChange
+	)
 
 	err = a.withTx(r.Context(), func(tx *sql.Tx) error {
 		updated = make([]Item, 0, len(refs))
+		rentals = rentals[:0]
 		for _, ref := range refs {
 			item, err := a.getItemByTag(r.Context(), tx, ref.AssetTag, locale)
 			if err != nil {
@@ -121,6 +126,9 @@ func (a *API) handleBulkUpdate(w http.ResponseWriter, r *http.Request) {
 				return err
 			}
 			updated = append(updated, after)
+			if change, ok := rentalChange(st, after); ok {
+				rentals = append(rentals, change)
+			}
 		}
 		return nil
 	})
@@ -128,6 +136,8 @@ func (a *API) handleBulkUpdate(w http.ResponseWriter, r *http.Request) {
 		a.writeItemError(w, r, err)
 		return
 	}
+	// One message for the whole batch.
+	a.announceRentals(r, rentals)
 
 	writeData(w, http.StatusOK, bulkResponse{Updated: len(updated), UpdatedItems: updated})
 }

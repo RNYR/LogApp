@@ -24,6 +24,8 @@ const (
 	KindOverdueDaily Kind = "overdue_daily"
 	KindManual       Kind = "manual"
 	KindTest         Kind = "test"
+	// KindRental announces a rental that was created or changed.
+	KindRental Kind = "rental"
 )
 
 // ChannelDiscord is the name reported by the Discord implementation.
@@ -40,9 +42,14 @@ type Item struct {
 	Type        string
 	Status      string
 	StatusColor string // "#rrggbb" badge colour, used as the embed accent
-	SentDate    string // YYYY-MM-DD
-	ReturnDate  string // YYYY-MM-DD
-	Note        string
+	// PreviousStatus is the status before a rental change; when it differs
+	// from Status the message shows "previous → status".
+	PreviousStatus string
+	// Renter is the personnel the item is rented to.
+	Renter     string
+	SentDate   string // YYYY-MM-DD
+	ReturnDate string // YYYY-MM-DD
+	Note       string
 
 	// DaysOverdue is how many days past ReturnDate the item is (0 = due today).
 	DaysOverdue int
@@ -68,6 +75,10 @@ type Report struct {
 	// Organization is shown in the footer; AppURL becomes a link back to Sklad.
 	Organization string
 	AppURL       string
+
+	// Actor is who made the change (rental reports): an Admin username, or
+	// empty for the anonymous Editor.
+	Actor string
 
 	// Locale selects the message language (en, cs, it); anything else falls back
 	// to English.
@@ -161,6 +172,11 @@ func (r Report) resolveTitle(l labels) string {
 	switch r.Kind {
 	case KindTest:
 		return l.TestSubject
+	case KindRental:
+		if len(r.Items) == 1 {
+			return fmt.Sprintf(l.RentalSubjectOne, r.Items[0].AssetTag)
+		}
+		return fmt.Sprintf(l.RentalSubjectMany, len(r.Items))
 	case KindManual:
 		if len(r.Items) == 1 {
 			return l.ManualSubjectOne
@@ -191,6 +207,13 @@ func (r Report) resolveSummary(l labels) string {
 	if r.TotalItems > len(r.Items) {
 		lines = append(lines, fmt.Sprintf(l.Truncated, len(r.Items), r.TotalItems))
 	}
+	if r.Kind == KindRental {
+		actor := strings.TrimSpace(r.Actor)
+		if actor == "" {
+			actor = l.PublicEditor
+		}
+		lines = append(lines, fmt.Sprintf(l.ChangedBy, actor))
+	}
 	if r.Kind == KindOverdueDaily || r.Kind == KindManual {
 		overdue := 0
 		for _, item := range r.Items {
@@ -217,6 +240,11 @@ func labelsFor(locale string) labels {
 			ManualSubjectOne:   "Sklad — kontrola po termínu (1 položka)",
 			ManualSubjectMany:  "Sklad — kontrola po termínu (%d položek)",
 			TestSubject:        "Sklad — testovací oznámení",
+			RentalSubjectOne:   "Sklad — výpůjčka: %s",
+			RentalSubjectMany:  "Sklad — výpůjčka: %d položek",
+			ChangedBy:          "Změnil: %s",
+			PublicEditor:       "Editor (bez přihlášení)",
+			FieldRenter:        "Půjčeno komu",
 			ItemCount:          "Položek: %d",
 			OverdueCount:       "Po termínu: %d",
 			NoItems:            "Žádné položky nevyžadují pozornost.",
@@ -244,6 +272,11 @@ func labelsFor(locale string) labels {
 			ManualSubjectOne:   "Sklad — controllo scadenze (1 articolo)",
 			ManualSubjectMany:  "Sklad — controllo scadenze (%d articoli)",
 			TestSubject:        "Sklad — notifica di prova",
+			RentalSubjectOne:   "Sklad — noleggio: %s",
+			RentalSubjectMany:  "Sklad — noleggio: %d articoli",
+			ChangedBy:          "Modificato da: %s",
+			PublicEditor:       "Editor (senza accesso)",
+			FieldRenter:        "Noleggiato a",
 			ItemCount:          "Articoli: %d",
 			OverdueCount:       "Scaduti: %d",
 			NoItems:            "Nessun articolo richiede attenzione.",
@@ -271,6 +304,11 @@ func labelsFor(locale string) labels {
 			ManualSubjectOne:   "Sklad — overdue check (1 item)",
 			ManualSubjectMany:  "Sklad — overdue check (%d items)",
 			TestSubject:        "Sklad — test notification",
+			RentalSubjectOne:   "Sklad — rental: %s",
+			RentalSubjectMany:  "Sklad — rental: %d items",
+			ChangedBy:          "Changed by: %s",
+			PublicEditor:       "Editor (no sign-in)",
+			FieldRenter:        "Rented to",
 			ItemCount:          "Items: %d",
 			OverdueCount:       "Overdue: %d",
 			NoItems:            "No items need attention.",
@@ -301,6 +339,11 @@ type labels struct {
 	ManualSubjectOne   string
 	ManualSubjectMany  string
 	TestSubject        string
+	RentalSubjectOne   string
+	RentalSubjectMany  string
+	ChangedBy          string
+	PublicEditor       string
+	FieldRenter        string
 	ItemCount          string
 	OverdueCount       string
 	NoItems            string

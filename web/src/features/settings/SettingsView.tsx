@@ -27,6 +27,7 @@ export function SettingsView() {
 
   const [webhook, setWebhook] = useState('')
   const [enabled, setEnabled] = useState(false)
+  const [rentalAlerts, setRentalAlerts] = useState(false)
   const [checkHour, setCheckHour] = useState(11)
   const [daysAhead, setDaysAhead] = useState(0)
   const [localeDefault, setLocaleDefault] = useState<Locale>('en')
@@ -51,6 +52,7 @@ export function SettingsView() {
     if (!data || dirty) return
     setWebhook('')
     setEnabled(data.discord.enabled)
+    setRentalAlerts(data.discord.rental_alerts ?? false)
     setCheckHour(data.scheduler.check_hour)
     setDaysAhead(data.scheduler.days_ahead)
     setLocaleDefault(data.locale.default)
@@ -65,7 +67,7 @@ export function SettingsView() {
   const save = useMutation({
     mutationFn: () => {
       const body: SettingsUpdate = {
-        discord: { enabled },
+        discord: { enabled, rental_alerts: rentalAlerts },
         scheduler: { check_hour: checkHour, days_ahead: daysAhead },
         locale: { default: localeDefault },
         general: { organization_name: orgName },
@@ -190,6 +192,22 @@ export function SettingsView() {
           {t('settings.enabled')}
         </label>
 
+        <label className="flex items-start gap-2 text-sm text-content">
+          <input
+            type="checkbox"
+            checked={rentalAlerts}
+            onChange={(event) => {
+              setRentalAlerts(event.target.checked)
+              touch()
+            }}
+            className="mt-0.5 h-4 w-4 accent-action"
+          />
+          <span>
+            {t('settings.rentalAlerts')}
+            <span className="block text-xs text-content-muted">{t('settings.rentalAlertsHint')}</span>
+          </span>
+        </label>
+
         <div className="flex flex-wrap items-center gap-2">
           <Button variant="secondary" size="sm" onClick={() => testWebhook.mutate()} loading={testWebhook.isPending}>
             {t('settings.test')}
@@ -297,7 +315,7 @@ export function SettingsView() {
               <tbody>
                 {(deliveriesQuery.data?.data ?? []).map((delivery) => (
                   <tr key={delivery.id}>
-                    <TableCell>{delivery.trigger}</TableCell>
+                    <TableCell>{t(`settings.trigger.${delivery.trigger}`, { defaultValue: delivery.trigger })}</TableCell>
                     <TableCell>
                       <Badge
                         className={

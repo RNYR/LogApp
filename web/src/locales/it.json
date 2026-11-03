@@ -197,6 +197,8 @@
     "webhook": "URL webhook",
     "webhookHint": "Incolla l'URL del webhook del canale Discord.",
     "enabled": "Attivo",
+    "rentalAlerts": "Pubblica le modifiche ai noleggi",
+    "rentalAlertsHint": "Un messaggio a ogni noleggio avviato o modificato (stato diverso da Feasibility, oppure date, nota o assegnatario modificati). Richiede “Attivo”.",
     "checkHour": "Ora del controllo giornaliero",
     "daysAhead": "Giorni in anticipo",
     "daysAheadHint": "Segnala anche le voci in scadenza entro questo numero di giorni (0 = solo scadute).",
@@ -212,7 +214,13 @@
     "notifyNowDone": "Controllo delle scadenze completato.",
     "deliveryLog": "Registro delle consegne",
     "webhookSet": "Webhook configurato",
-    "webhookNotSet": "Nessun webhook configurato"
+    "webhookNotSet": "Nessun webhook configurato",
+    "trigger": {
+      "overdue_daily": "Controllo scadenze giornaliero",
+      "manual": "Controllo scadenze manuale",
+      "test": "Messaggio di prova",
+      "rental": "Modifica noleggio"
+    }
   },
   "options": {
     "title": "Gestione opzioni",

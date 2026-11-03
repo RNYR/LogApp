@@ -36,8 +36,9 @@ access working on laptops, Android, and iOS.
 - 🏷️ **PT-E300 label preparation** — exact asset IDs and manual CODE128 keypad instructions, followed by scan verification.
 - 📦 **Scan → buffer → bulk actions** — scan many items into a buffer and apply
   status/date/note changes in one transaction.
-- 🤖 **Discord notifications** — overdue-item reports are posted to a Discord
-  webhook instead of email, with a delivery log and no duplicate sends.
+- 🤖 **Discord notifications** — overdue-item reports and (optionally) every
+  rental change are posted to a Discord webhook, with a delivery log and no
+  duplicate overdue sends.
 - 🌍 **Trilingual UI** — Czech, English, and Italian, switchable at runtime.
 - 👥 **Real auth & RBAC** — Argon2id password hashing, session cookies, CSRF
   protection, anonymous Editor rental access, authenticated Admin administration, and an audit log.
@@ -45,7 +46,7 @@ access working on laptops, Android, and iOS.
   append-only migrations, and scheduled consistent `VACUUM INTO` database backups.
 - 🧭 **mDNS** — discoverable as `sklad.local` on the local network.
 
-> **Version 2.0.6.** The architecture, API, schema and i18n contracts are frozen
+> **Version 2.0.7.** The architecture, API, schema and i18n contracts are frozen
 > in [docs/contracts](docs/contracts) and [openapi/openapi.yaml](openapi/openapi.yaml);
 > the implementation is complete and covered by Go + frontend test suites and CI
 > (see [.github/workflows/ci.yml](.github/workflows/ci.yml)).
