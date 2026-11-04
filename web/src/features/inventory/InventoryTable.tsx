@@ -1,5 +1,6 @@
 import { useRentals } from '../rentals/RentalContext'
-import { useEffect, useId, useMemo, useRef, useState } from 'react'
+import { RentalBuffer } from '../rentals/RentalBuffer'
+import { Fragment, useEffect, useId, useMemo, useRef, useState } from 'react'
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
 import {
@@ -44,7 +45,14 @@ import {
 } from './ItemEditor'
 
 const PAGE_SIZES = [10, 20, 50, 100]
-const NUM_COLUMNS = 9
+const NUM_COLUMNS = 10
+
+/**
+ * Columns hidden on phones. Renter and note move under the item name and the
+ * return date under the status, so a 360 px screen needs no sideways scroll.
+ */
+const PHONE_HIDDEN: ReadonlySet<SortField> = new Set<SortField>(['sn', 'type', 'sent_date', 'return_date', 'note'])
+const phoneHidden = 'hidden md:table-cell'
 
 const SORTABLE_COLUMNS: ReadonlyArray<{ field: SortField; labelKey: string }> = [
   { field: 'asset_tag', labelKey: 'inventory.columns.id' },
@@ -101,12 +109,14 @@ function SortHeader({
   activeField,
   order,
   onToggle,
+  className,
 }: {
   field: SortField
   label: string
   activeField: SortField
   order: SortOrder
   onToggle: (field: SortField) => void
+  className?: string
 }) {
   const active = field === activeField
   const ariaSort: 'ascending' | 'descending' | 'none' = active
@@ -115,7 +125,7 @@ function SortHeader({
       : 'ascending'
     : 'none'
   return (
-    <TableHeader scope="col" aria-sort={ariaSort}>
+    <TableHeader scope="col" aria-sort={ariaSort} className={className}>
       <button type="button" className="inline-flex items-center gap-1 hover:text-content" onClick={() => onToggle(field)}>
         {label}
         <span aria-hidden="true" className={cn('text-[10px]', active ? 'text-action' : 'text-transparent')}>
@@ -159,6 +169,18 @@ export function InventoryTable() {
 
   // Focus fallback for the archive dialog when the archived row is removed.
   const refreshButtonRef = useRef<HTMLButtonElement | null>(null)
+
+  // The rental buffer sits below the list; a pinned bar leads to it while it
+  // is off-screen.
+  const bufferRef = useRef<HTMLDivElement | null>(null)
+  const [bufferVisible, setBufferVisible] = useState(false)
+  useEffect(() => {
+    const target = bufferRef.current
+    if (!target || typeof IntersectionObserver === 'undefined') return
+    const observer = new IntersectionObserver(([entry]) => setBufferVisible(entry.isIntersecting))
+    observer.observe(target)
+    return () => observer.disconnect()
+  }, [])
 
   useEffect(() => {
     const timer = setTimeout(() => {
@@ -443,14 +465,17 @@ export function InventoryTable() {
           </div>
 
           <TableScroll>
-            <Table className="inventory-table min-w-[1000px]">
+            <Table className="inventory-table min-w-[1100px]">
               <TableHead>
                 <tr>
                   <TableHeader />
                   {SORTABLE_COLUMNS.map((column) => (
-                    <TableHeader key={column.field} scope="col">
-                      {t(column.labelKey)}
-                    </TableHeader>
+                    <Fragment key={column.field}>
+                      <TableHeader scope="col">{t(column.labelKey)}</TableHeader>
+                      {column.field === 'status' ? (
+                        <TableHeader scope="col">{t('inventory.columns.renter')}</TableHeader>
+                      ) : null}
+                    </Fragment>
                   ))}
                 </tr>
               </TableHead>
@@ -482,19 +507,27 @@ export function InventoryTable() {
       {/* Inventory table --------------------------------------------------- */}
       <Card className="p-4">
         <TableScroll>
-          <Table className="inventory-table min-w-[1000px]">
+          <Table className="inventory-table md:min-w-[1100px]">
             <TableHead>
               <tr>
                 <TableHeader scope="col" className="w-px whitespace-nowrap"><input type="checkbox" className="h-4 w-4" aria-label={t('rental.selectPage')} disabled={!items.some(i=>!i.archived)} checked={items.length>0 && items.filter(i=>!i.archived).every(i=>rentals.items.some(r=>r.id===i.id))} onChange={e=>e.target.checked?rentals.add(items):items.forEach(i=>rentals.remove(i.id))} /></TableHeader>
                 {SORTABLE_COLUMNS.map((column) => (
-                  <SortHeader
-                    key={column.field}
-                    field={column.field}
-                    label={t(column.labelKey)}
-                    activeField={sort}
-                    order={order}
-                    onToggle={toggleSort}
-                  />
+                  <Fragment key={column.field}>
+                    <SortHeader
+                      field={column.field}
+                      label={t(column.labelKey)}
+                      activeField={sort}
+                      order={order}
+                      onToggle={toggleSort}
+                      className={PHONE_HIDDEN.has(column.field) ? phoneHidden : undefined}
+                    />
+                    {column.field === 'status' ? (
+                      <TableHeader scope="col" className={phoneHidden}>
+                        {/* Not sortable; styled like the sort buttons beside it. */}
+                        <span className="text-[13px] normal-case">{t('inventory.columns.renter')}</span>
+                      </TableHeader>
+                    ) : null}
+                  </Fragment>
                 ))}
               </tr>
             </TableHead>
@@ -623,6 +656,27 @@ export function InventoryTable() {
         </div>
       </Card>
 
+      {/* Rental buffer: below the list, so selecting rows never shifts them. */}
+      <div ref={bufferRef} className="scroll-mt-4">
+        <RentalBuffer />
+      </div>
+      {rentals.items.length > 0 && !bufferVisible ? (
+        <div className="sticky bottom-3 z-20 flex justify-center">
+          <div className="flex items-center gap-3 rounded-full border border-stroke bg-panel px-4 py-2 shadow-lg">
+            <span className="text-sm text-content">{t('rental.selectedCount', { count: rentals.items.length })}</span>
+            <Button
+              size="sm"
+              onClick={() => {
+                bufferRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+                bufferRef.current?.querySelector<HTMLElement>('select, input, button')?.focus({ preventScroll: true })
+              }}
+            >
+              {t('rental.goToBuffer')}
+            </Button>
+          </div>
+        </div>
+      ) : null}
+
       <ConfirmDialog
         open={archiveTarget !== null}
         busy={archiveItem.isPending}
@@ -689,15 +743,29 @@ function ItemRow({
       <TableCell>
         <span className="font-mono text-xs">{item.asset_tag}</span>
       </TableCell>
-      <TableCell>{item.name || '—'}</TableCell>
-      <TableCell>{item.sn || '—'}</TableCell>
-      <TableCell>{typeLabel}</TableCell>
+      <TableCell>
+        {item.name || '—'}
+        {/* Phones: the hidden renter and note columns, under the name. */}
+        {item.personnel_name || item.note ? (
+          <span className="mt-1 block text-xs text-content-muted md:hidden">
+            {[item.personnel_name, item.note].filter(Boolean).join(' · ')}
+          </span>
+        ) : null}
+      </TableCell>
+      <TableCell className={phoneHidden}>{item.sn || '—'}</TableCell>
+      <TableCell className={phoneHidden}>{typeLabel}</TableCell>
       <TableCell>
         <Badge color={statusColor}>{statusLabel}</Badge>
+        {item.return_date ? (
+          <span className="mt-1 block text-xs text-content-muted md:hidden">
+            {t('inventory.columns.return')}: {returnDate}
+          </span>
+        ) : null}
       </TableCell>
-      <TableCell>{sentDate}</TableCell>
-      <TableCell>{returnDate}</TableCell>
-      <TableCell><div>{item.personnel_name && <span className="block text-xs font-medium">{item.personnel_name}</span>}{item.note || '—'}</div></TableCell>
+      <TableCell className={phoneHidden}>{item.personnel_name || '—'}</TableCell>
+      <TableCell className={phoneHidden}>{sentDate}</TableCell>
+      <TableCell className={phoneHidden}>{returnDate}</TableCell>
+      <TableCell className={phoneHidden}>{item.note || '—'}</TableCell>
     </tr>
   )
 }

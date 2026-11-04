@@ -97,6 +97,7 @@
       "sn": "SN / PN",
       "type": "Typ",
       "status": "Stav",
+      "renter": "Půjčeno komu",
       "sent": "Odesláno",
       "return": "Vrácení",
       "note": "Poznámka"
@@ -333,7 +334,9 @@
     "personName": "Jméno osoby",
     "addPerson": "Přidat osobu",
     "customerPermanent": "Trvalá možnost pro zákazníka",
-    "accountHelp": "Admin je jediný přihlašovaný účet. Editor je veřejný režim zápůjček bez účtu."
+    "accountHelp": "Admin je jediný přihlašovaný účet. Editor je veřejný režim zápůjček bez účtu.",
+    "selectedCount": "Vybráno: {{count}}",
+    "goToBuffer": "Otevřít formulář výpůjčky"
   },
   "personnel": {
     "title": "Osoby"

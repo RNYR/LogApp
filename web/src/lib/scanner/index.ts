@@ -11,6 +11,7 @@ export {
   createFeedback,
   decodeImageFile,
   normalizeScanValue,
+  canonicalAssetTag,
   isSecureContextAvailable,
   hasMediaDevices,
   isBarcodeDetectorSupported,

@@ -19,6 +19,8 @@ export interface EditableItem {
   sentDate: string
   returnDate: string
   note: string
+  /** Renter shown read-only; rentals are edited in the rental buffer. */
+  personnelName: string
   version: number | null
 }
 
@@ -33,6 +35,7 @@ export function emptyEditableItem(): EditableItem {
     sentDate: '',
     returnDate: '',
     note: '',
+    personnelName: '',
     version: null,
   }
 }
@@ -48,6 +51,7 @@ export function toEditableItem(item: Item): EditableItem {
     sentDate: item.sent_date ?? '',
     returnDate: item.return_date ?? '',
     note: item.note,
+    personnelName: item.personnel_name ?? '',
     version: item.version,
   }
 }
@@ -204,6 +208,10 @@ export function ItemEditor({
             )}
           </Field>
         </div>
+      </TableCell>
+
+      <TableCell>
+        <span className="text-sm text-content-muted">{draft.personnelName || '—'}</span>
       </TableCell>
 
       <TableCell>

@@ -57,7 +57,7 @@ permitted rental updates without login.
 ## 2. First install
 
 From the Mac, on a clean, committed checkout of the release (tag it first, e.g.
-`v2.0.7`; `make-bundle` refuses uncommitted changes):
+`v2.0.8`; `make-bundle` refuses uncommitted changes):
 
 ```sh
 ./scripts/make-bundle                         # writes ./sklad-release, tag from git describe
@@ -81,7 +81,7 @@ Set at least:
 - `SKLAD_LAN_IP` — the NAS address (certificate SAN and `default_sni`).
 - `SKLAD_HOST` / `SKLAD_HOST_ALT` — the names devices will use (default
   `sklad.local` / `sklad`).
-- `SKLAD_IMAGE_TAG` — the tag the push printed (e.g. `2.0.7`).
+- `SKLAD_IMAGE_TAG` — the tag the push printed (e.g. `2.0.8`).
 - `SKLAD_HSTS_MAX_AGE=0` until every device trusts the CA (the default in
   `.env.example`).
 - Ports: `80`/`443` by default. If QTS itself owns 443, use for example

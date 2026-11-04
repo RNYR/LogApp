@@ -1,7 +1,7 @@
 {
   "name": "sklad-web",
   "private": true,
-  "version": "2.0.7",
+  "version": "2.0.8",
   "description": "Sklad — equipment inventory & lending SPA (React + TypeScript + Tailwind).",
   "license": "MIT",
   "author": "David Žitník",

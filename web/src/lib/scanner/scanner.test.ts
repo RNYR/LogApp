@@ -7,6 +7,7 @@ import {
   isCameraScanSupported,
   isSecureContextAvailable,
   normalizeScanValue,
+  canonicalAssetTag,
 } from './scanner'
 import { attachHidScanner, createHidScanner, isEditableElement } from './hid'
 
@@ -69,6 +70,22 @@ describe('normalizeScanValue', () => {
     expect(normalizeScanValue('PV-999')).toBe('PV-999')
     expect(normalizeScanValue(' pv-1000 ')).toBe('PV-1000')
     expect(normalizeScanValue('')).toBe('')
+  })
+})
+
+describe('canonicalAssetTag', () => {
+  it('completes hand-typed asset tags', () => {
+    expect(canonicalAssetTag('pv-5')).toBe('PV-005')
+    expect(canonicalAssetTag('PV5')).toBe('PV-005')
+    expect(canonicalAssetTag(' pv 049 ')).toBe('PV-049')
+    expect(canonicalAssetTag('pv-001')).toBe('PV-001')
+    expect(canonicalAssetTag('PV-1234')).toBe('PV-1234')
+  })
+
+  it('leaves other codes alone apart from normalizing', () => {
+    expect(canonicalAssetTag('sn-ab-12')).toBe('SN-AB-12')
+    expect(canonicalAssetTag('12345')).toBe('12345')
+    expect(canonicalAssetTag('  x  ')).toBe('X')
   })
 })
 

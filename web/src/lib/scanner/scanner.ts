@@ -102,6 +102,19 @@ export function normalizeScanValue(raw: string): string {
   return raw.replace(/\s+/g, ' ').trim().toUpperCase()
 }
 
+/**
+ * Canonical asset tag for a code typed by hand: `pv-5`, `PV5` and `pv 005`
+ * all become `PV-005` (letters, hyphen, number padded to three digits). Codes
+ * of any other shape are only normalized. Scanned labels are exact and do not
+ * go through this.
+ */
+export function canonicalAssetTag(raw: string): string {
+  const code = normalizeScanValue(raw)
+  const match = /^([A-Z]+)[\s-]*(\d+)$/.exec(code)
+  if (!match) return code
+  return `${match[1]}-${match[2].padStart(3, '0')}`
+}
+
 // ---------------------------------------------------------------------------
 // Capability detection
 // ---------------------------------------------------------------------------

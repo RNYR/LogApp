@@ -377,6 +377,59 @@ test.describe('scan → buffer → bulk', () => {
   })
 })
 
+test.describe('inventory usability', () => {
+  test.beforeEach(async ({ page }) => {
+    await useEnglish(page)
+  })
+
+  test('shows the renter in its own column, and under the name on phones', async ({ page }) => {
+    // The public Editor view: what most phones show.
+    await mockApi(page, { user: null, items: [{ ...ITEM, status: 'Customer', status_label: 'Customer On-Site', personnel_id: 1, personnel_name: 'Jana Nováková', note: 'ACME s.r.o.', return_date: '2026-11-20' }] })
+    await page.setViewportSize({ width: 1280, height: 900 })
+    await page.goto('/')
+    await expect(page.getByRole('columnheader', { name: 'Rented to' })).toBeVisible()
+    await expect(page.getByRole('cell', { name: 'Jana Nováková', exact: true })).toBeVisible()
+    await page.setViewportSize({ width: 360, height: 800 })
+    await expect(page.getByRole('columnheader', { name: 'Rented to' })).toBeHidden()
+    await expect(page.getByText('Jana Nováková · ACME s.r.o.')).toBeVisible()
+    await expect(page.getByText('Return: Nov 20, 2026')).toBeVisible()
+    // Without the admin buttons the phone table fits without sideways scrolling.
+    const overflow = await page.locator('.inventory-table').evaluate((table) => {
+      const scroller = table.parentElement as HTMLElement
+      return scroller.scrollWidth - scroller.clientWidth
+    })
+    expect(overflow).toBeLessThanOrEqual(1)
+  })
+
+  test('selecting a row does not move the list; a pinned bar leads to the form', async ({ page }) => {
+    await mockApi(page, { items: Array.from({ length: 12 }, (_, n) => ({ ...ITEM, id: n + 1, asset_tag: `PV-${String(n + 1).padStart(3, '0')}` })) })
+    await page.setViewportSize({ width: 1280, height: 700 })
+    await page.goto('/')
+    const second = page.getByRole('checkbox', { name: 'Select PV-002', exact: true })
+    const before = await second.boundingBox()
+    await page.getByRole('checkbox', { name: 'Select PV-001', exact: true }).check()
+    expect((await second.boundingBox())?.y).toBe(before?.y)
+    await second.check()
+    await expect(page.getByText('Selected: 2')).toBeVisible()
+    await page.getByRole('button', { name: 'Open rental form' }).click()
+    await expect(page.getByRole('region', { name: 'Rental buffer' }).getByRole('button', { name: 'Save selected (2)' })).toBeInViewport()
+  })
+
+  test('manual entry completes short codes and keeps unknown ones', async ({ page }) => {
+    await mockApi(page)
+    await page.goto('/scan')
+    const manual = page.getByLabel('Enter code manually')
+    await manual.fill('pv-5')
+    await page.getByRole('button', { name: 'Add to buffer' }).click()
+    await expect(page.getByText('Matched: PV-005')).toBeVisible()
+    await expect(manual).toHaveValue('')
+    await manual.fill('XX-1')
+    await manual.press('Enter')
+    await expect(page.getByText('Unknown code: XX-001')).toBeVisible()
+    await expect(manual).toHaveValue('XX-1')
+  })
+})
+
 test.describe('settings', () => {
   test.beforeEach(async ({ page }) => {
     await useEnglish(page)

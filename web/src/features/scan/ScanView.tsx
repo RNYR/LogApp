@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { api } from '../../lib/api'
 import { apiErrorMessage } from '../../lib/api/errorMessage'
-import { attachHidScanner, createScanner, decodeImageFile, describeScannerSupport, normalizeScanValue, type Scanner, type ScannerError, type ScannerErrorCode, type ScannerStatus, type ZoomRange } from '../../lib/scanner'
+import { attachHidScanner, canonicalAssetTag, createScanner, decodeImageFile, describeScannerSupport, normalizeScanValue, type Scanner, type ScannerError, type ScannerErrorCode, type ScannerStatus, type ZoomRange } from '../../lib/scanner'
 import { Alert, Button, Card, Field, Input, Notice as NoticeMessage, PageHeader } from '../../components/ui'
 import { useRentals } from '../rentals/RentalContext'
 const CAMERA_ERROR_KEYS: Record<ScannerErrorCode,string> = { insecure_context:'scan.insecureContext', permission_denied:'scan.permissionDenied', no_camera:'scan.noCamera', camera_in_use:'scan.cameraInUse', unsupported:'scan.unsupported', unknown:'errors.server' }
@@ -18,15 +18,18 @@ export function ScanView() {
  const [photoBusy,setPhotoBusy]=useState(false);const photoRef=useRef<HTMLInputElement|null>(null)
  const videoRef=useRef<HTMLVideoElement|null>(null);const scannerRef=useRef<Scanner|null>(null)
  const support=useMemo(()=>describeScannerSupport(),[])
- const addCode=useCallback(async(raw:string)=>{
-  const codes=raw.split(/[,;\n]+/).map(normalizeScanValue).filter(Boolean)
+ // Returns true when every code ended up in the buffer (typed codes are kept
+ // in the field otherwise, so a typo can be fixed instead of retyped).
+ const addCode=useCallback(async(raw:string,typed=false):Promise<boolean>=>{
+  const codes=raw.split(/[,;\n]+/).map(typed?canonicalAssetTag:normalizeScanValue).filter(Boolean)
   const fresh=codes.filter(code=>!pending.current.has(code)&&!rentalsRef.current.items.some(i=>i.asset_tag.toUpperCase()===code))
-  if(!fresh.length){if(codes.length)setNotice({kind:'info',message:t('scan.duplicate')});return}
+  if(!fresh.length){if(codes.length)setNotice({kind:'info',message:t('scan.duplicate')});return true}
   fresh.forEach(code=>pending.current.add(code))
-  try {const result=await api.items.resolve(fresh);rentalsRef.current.add(result.matched);setNotice({kind:result.unknown.length?'info':'success',message:result.unknown.length?`${t('scan.unknown')}: ${result.unknown.join(', ')}`:`${t('scan.matched')}: ${result.matched.map(i=>i.asset_tag).join(', ')}`})}
-  catch(error){setNotice({kind:'error',message:apiErrorMessage(error,t)})}
+  try {const result=await api.items.resolve(fresh);rentalsRef.current.add(result.matched);setNotice({kind:result.unknown.length?'info':'success',message:result.unknown.length?`${t('scan.unknown')}: ${result.unknown.join(', ')}`:`${t('scan.matched')}: ${result.matched.map(i=>i.asset_tag).join(', ')}`});return result.unknown.length===0}
+  catch(error){setNotice({kind:'error',message:apiErrorMessage(error,t)});return false}
   finally{fresh.forEach(code=>pending.current.delete(code))}
  },[t])
+ function submitManual(){const value=manualCode;void addCode(value,true).then(ok=>{if(ok)setManualCode(current=>current===value?'':current)})}
  const addCodeRef=useRef(addCode);addCodeRef.current=addCode
   // ------------------------------------------------------------------ camera
   async function startCamera(): Promise<void> {
@@ -204,8 +207,7 @@ export function ScanView() {
                   onKeyDown={(event) => {
                     if (event.key === 'Enter') {
                       event.preventDefault()
-                      void addCode(manualCode)
-                      setManualCode('')
+                      submitManual()
                     }
                   }}
                 />
@@ -213,10 +215,7 @@ export function ScanView() {
                   variant="secondary"
                   className="shrink-0 whitespace-nowrap"
                   disabled={!manualCode.trim()}
-                  onClick={() => {
-                    void addCode(manualCode)
-                    setManualCode('')
-                  }}
+                  onClick={submitManual}
                 >
                   {t('scan.addToBuffer')}
                 </Button>

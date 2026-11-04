@@ -58,7 +58,8 @@ function ShellContent() {
           <div className="flex min-w-0 flex-wrap items-center justify-end gap-2"><span className="role-chip">{t(`roles.${role}`)}</span><LanguageSwitcher />{user ? <Button variant="ghost" size="sm" onClick={() => void logout().then(() => navigate('/'))}>{t('auth.logout')}</Button> : <Button size="sm" onClick={() => navigate('/login', { state: { from: pathname } })}>{t('auth.signIn')}</Button>}</div>
         </header>
         <main id="main-content" tabIndex={-1} className="sklad-main min-w-0 focus:outline-none">
-          {(pathname === '/' || pathname === '/scan') && <RentalBuffer />}
+          {/* Inventory renders the buffer below its list, so ticking items never moves the list. */}
+          {pathname === '/scan' && <RentalBuffer />}
           <Outlet key={role} />
         </main>
         <footer className="sklad-footer flex flex-wrap items-center justify-between gap-3 border-t border-stroke text-xs text-content-muted">{user?.role === 'admin' || user?.must_change_password ? <NavLink to="/change-password" className="underline-offset-4 hover:underline">{t('auth.changePassword')}</NavLink> : null}<p>{t('app.name')} — {t('footer.madeBy')} · {t('footer.openSource')} · {t('common.license')}: MIT</p></footer>

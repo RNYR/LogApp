@@ -97,6 +97,7 @@
       "sn": "SN / PN",
       "type": "Type",
       "status": "Status",
+      "renter": "Rented to",
       "sent": "Sent",
       "return": "Return",
       "note": "Note"
@@ -333,7 +334,9 @@
     "personName": "Personnel name",
     "addPerson": "Add person",
     "customerPermanent": "Permanent customer option",
-    "accountHelp": "Admin is the only authenticated account. Editor is public rental mode and does not require an account."
+    "accountHelp": "Admin is the only authenticated account. Editor is public rental mode and does not require an account.",
+    "selectedCount": "Selected: {{count}}",
+    "goToBuffer": "Open rental form"
   },
   "personnel": {
     "title": "Personnel"

@@ -5,6 +5,22 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.0.8] - 2026-11-04
+
+### Changed
+
+- **Phones:** the inventory fits a phone screen without sideways scrolling in
+  the public Editor view. SN, type, sent date, renter and note columns are
+  hidden below 768 px; renter and note appear under the item name, the return
+  date under the status.
+- **"Rented to" column** on wider screens (it used to be a small line inside
+  the Note cell).
+- **Selecting items no longer moves the list.** On Inventory the rental form
+  sits below the list; a bar pinned to the bottom ("Selected: N · Open rental
+  form") leads to it. On Scan the form stays on top.
+- **Manual code entry** completes hand-typed tags (`pv-5`, `PV5`, `pv 005` →
+  `PV-005`) and keeps an unknown code in the field so it can be corrected.
+
 ## [2.0.7] - 2026-11-03
 
 ### Added

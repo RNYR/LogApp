@@ -97,6 +97,7 @@
       "sn": "SN / PN",
       "type": "Tipo",
       "status": "Stato",
+      "renter": "Noleggiato a",
       "sent": "Inviato",
       "return": "Reso",
       "note": "Nota"
@@ -333,7 +334,9 @@
     "personName": "Nome della persona",
     "addPerson": "Aggiungi persona",
     "customerPermanent": "Opzione cliente permanente",
-    "accountHelp": "Admin è l’unico account autenticato. Editor è la modalità pubblica di prestito, senza account."
+    "accountHelp": "Admin è l’unico account autenticato. Editor è la modalità pubblica di prestito, senza account.",
+    "selectedCount": "Selezionati: {{count}}",
+    "goToBuffer": "Apri modulo di noleggio"
   },
   "personnel": {
     "title": "Personale"
