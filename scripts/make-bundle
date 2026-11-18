@@ -55,7 +55,7 @@ cp deploy/Caddyfile deploy/Caddyfile.byo "$OUT/deploy/"
 cp deploy/certs/README.md "$OUT/deploy/certs/"
 cp deploy/avahi/sklad.service "$OUT/deploy/avahi/"
 cp scripts/sklad-stack scripts/nas-deploy scripts/nas-cutover "$OUT/scripts/"
-cp docs/DEPLOY-QNAP.md docs/CUTOVER.md docs/TLS-CAMERA.md docs/LABELS.md "$OUT/docs/"
+cp docs/DEPLOY-QNAP.md docs/CUTOVER.md docs/FRESH-START.md docs/TLS-CAMERA.md docs/LABELS.md "$OUT/docs/"
 chmod +x "$OUT/scripts/sklad-stack" "$OUT/scripts/nas-deploy" "$OUT/scripts/nas-cutover"
 printf 'TAG=%s\nCOMMIT=%s\n' "$TAG" "$COMMIT" >"$OUT/RELEASE"
 

@@ -15,6 +15,10 @@
 #                                     (test data and test CA are kept)
 #   ./scripts/test-stack reset        down + DELETE the test volumes
 #                                     (empty database and a NEW test CA next time)
+#   ./scripts/test-stack export [DIR] consistent copy of the TEST database in
+#                                     DIR/<time>/sklad.db (default
+#                                     <share>/Backup/sklad-test), e.g. to
+#                                     replace the live data (docs/FRESH-START.md)
 #   ./scripts/test-stack config       print the resolved compose config
 #   ./scripts/test-stack compose ...  any other docker compose subcommand
 #
@@ -23,12 +27,51 @@
 set -eu
 
 cd "$(dirname "$0")/.."
+HERE=$(pwd)
+
+# Docker / Compose on QNAP Container Station. /share is a RAM disk rebuilt at
+# boot, so a symlink such as /share/Container/bin does not survive a reboot:
+# look in the Container Station package itself as well.
+CS=/share/CACHEDEV1_DATA/.qpkg/container-station
+PATH=$CS/bin:$CS/usr/bin:/share/Container/bin:$PATH
+if ! command -v docker-compose >/dev/null 2>&1; then
+	found=$(find "$CS" -maxdepth 6 -name docker-compose \( -type f -o -type l \) 2>/dev/null | head -n 1)
+	[ -z "$found" ] || PATH=$(dirname "$found"):$PATH
+fi
+export PATH
 
 PROJECT=sklad-test
 FILE=docker-compose.test.yml
 ENVFILE=.env.test
 
 die() { echo "test-stack: $*" >&2; exit 1; }
+
+# on_ram_disk DIR — true when DIR (or its nearest existing parent) is on tmpfs.
+on_ram_disk() {
+	d=$1
+	while [ ! -d "$d" ] && [ "$d" != / ]; do d=$(dirname "$d"); done
+	[ "$(df -P "$d" 2>/dev/null | awk 'NR == 2 { print $1 }')" = tmpfs ]
+}
+on_ram_disk "$HERE" && echo "test-stack: WARNING: $HERE is on the RAM disk and is lost at the next reboot" >&2
+
+# export [DIR] — consistent snapshot of the TEST database, taken by the server
+# binary inside the running container (VACUUM INTO), copied out of the volume.
+export_db() {
+	root=${1:-$(dirname "$(dirname "$HERE")")/Backup/sklad-test}
+	on_ram_disk "$root" && die "$root is on the RAM disk (lost at reboot); use a folder under /share/CACHEDEV1_DATA/<share>/"
+	[ "$(docker inspect -f '{{.State.Running}}' sklad-test-app 2>/dev/null || true)" = true ] ||
+		die "sklad-test-app is not running (./scripts/test-stack up)"
+	out="$root/$(date -u +%Y%m%dT%H%M%SZ)"
+	mkdir -p "$out"
+	chmod 700 "$root" "$out"
+	path=$(docker exec sklad-test-app /usr/local/bin/sklad backup) || die "database snapshot failed"
+	docker cp "sklad-test-app:$path" "$out/sklad.db" >/dev/null || die "copying $path out of sklad-test-app failed"
+	chmod 600 "$out/sklad.db"
+	user=$(sed -n 's/^SKLAD_ADMIN_USERNAME=//p' "$ENVFILE" | tail -n 1 | tr -d '"'"'"'\r')
+	printf 'source=sklad-test\nadmin_username=%s\nexported_at=%s\n' "${user:-admin}" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" >"$out/INFO"
+	chmod 600 "$out/INFO"
+	echo "$out/sklad.db"
+}
 
 [ -f "$FILE" ] || die "$FILE not found (run from the Sklad project folder)"
 [ -f "$ENVFILE" ] || die "$ENVFILE missing: cp .env.test.example $ENVFILE and fill it in"
@@ -80,10 +123,11 @@ case "$cmd" in
 		[ "$answer" = "reset" ] || die "aborted"
 		compose down -v "$@"
 		;;
+	export)      export_db "$@" ;;
 	config)      compose config "$@" ;;
 	compose)     compose "$@" ;;
 	*)
-		sed -n '4,21p' "$0" | sed 's/^# \{0,1\}//'
+		sed -n '4,25p' "$0" | sed 's/^# \{0,1\}//'
 		[ -z "$cmd" ] || exit 1
 		;;
 esac

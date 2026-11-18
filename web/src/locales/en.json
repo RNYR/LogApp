@@ -114,7 +114,8 @@
     "editingAsAdmin": "Editing as admin",
     "lockedByOther": "Someone else is editing this item. Refresh and try again.",
     "archive": "Archive",
-    "exportAll": "Export all records (ignores search filters)"
+    "exportAll": "Export all records (ignores search filters)",
+    "autoId": "Auto"
   },
   "pagination": {
     "showEntries": "Show entries",

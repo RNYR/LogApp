@@ -114,7 +114,8 @@
     "editingAsAdmin": "Úpravy jako správce",
     "lockedByOther": "Tuto položku právě upravuje někdo jiný. Obnovte stránku a zkuste to znovu.",
     "archive": "Archivovat",
-    "exportAll": "Export všech záznamů (bez filtrů hledání)"
+    "exportAll": "Export všech záznamů (bez filtrů hledání)",
+    "autoId": "Automaticky"
   },
   "pagination": {
     "showEntries": "Záznamů na stránku",

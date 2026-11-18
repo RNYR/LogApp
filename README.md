@@ -46,7 +46,7 @@ access working on laptops, Android, and iOS.
   append-only migrations, and scheduled consistent `VACUUM INTO` database backups.
 - 🧭 **mDNS** — discoverable as `sklad.local` on the local network.
 
-> **Version 2.0.8.** The architecture, API, schema and i18n contracts are frozen
+> **Version 2.0.9.** The architecture, API, schema and i18n contracts are frozen
 > in [docs/contracts](docs/contracts) and [openapi/openapi.yaml](openapi/openapi.yaml);
 > the implementation is complete and covered by Go + frontend test suites and CI
 > (see [.github/workflows/ci.yml](.github/workflows/ci.yml)).
@@ -203,6 +203,8 @@ go run ./server/cmd/import-json \
 - [docs/DEPLOY-QNAP.md](docs/DEPLOY-QNAP.md) — live stack on a QNAP NAS: first
   install, cut-over from `equipment-log`, upgrades and rollback
   (`scripts/make-bundle`, `push-to-nas`, `sklad-stack`), backups and restore
+- [docs/FRESH-START.md](docs/FRESH-START.md) — set the stock up from scratch on
+  an empty test copy, then make that database the live one
 - [docs/TLS-CAMERA.md](docs/TLS-CAMERA.md) — root CA trust per platform and
   camera troubleshooting (HTTPS is required for scanning)
 - [docs/LABELS.md](docs/LABELS.md) — CODE128 labels and the Brother P-Touch E300

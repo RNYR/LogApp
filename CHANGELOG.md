@@ -5,6 +5,25 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.0.9] - 2026-11-18
+
+### Added
+
+- **Fresh start on the test copy** ([docs/FRESH-START.md](docs/FRESH-START.md)):
+  build the inventory on an empty test stack, then make that database the live
+  one. `./scripts/test-stack export` writes a consistent copy of the test
+  database to `<share>/Backup/sklad-test/<time>/sklad.db`.
+- New inventory entries can take a typed ID — e.g. the one already printed on
+  the item's label (`pv-17` → `PV-017`); empty still picks the next number.
+
+### Changed
+
+- `sklad-stack restore-db` backs up the live database first, and refuses a
+  database without the live Admin account (`SKLAD_ADMIN_USERNAME`), which
+  would otherwise lock the Admin out (`SKLAD_SKIP_ADMIN_CHECK=1` overrides).
+- `test-stack` finds QNAP's `docker-compose` inside Container Station and warns
+  when run from the RAM disk, like the live scripts.
+
 ## [2.0.8] - 2026-11-04
 
 ### Changed

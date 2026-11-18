@@ -16,7 +16,8 @@
 #                                         (data, CA and images are kept)
 #   ./scripts/sklad-stack backup [DIR]    database + CA copy into DIR/<time>/
 #                                         (default <share>/Backup/sklad)
-#   ./scripts/sklad-stack restore-db FILE replace the database with a backup
+#   ./scripts/sklad-stack restore-db FILE replace the database with a backup or
+#                                         a test-stack export (backs up first)
 #   ./scripts/sklad-stack restore-ca FILE replace the Caddy CA with a backup
 #   ./scripts/sklad-stack rollback        go back to the previous release
 #   ./scripts/sklad-stack history         deployments made by nas-deploy
@@ -200,9 +201,22 @@ restore_db() {
 	[ -n "$src" ] && [ -f "$src" ] || die "usage: restore-db <backup>/sklad.db"
 	tag=$(image_tag)
 	docker image inspect "sklad:$tag" >/dev/null 2>&1 || die "image sklad:$tag not found"
+	# Only SKLAD_ADMIN_USERNAME may sign in. A database without that account
+	# (e.g. one prepared on the test stack under another name) would lock the
+	# Admin out, and reset-admin cannot create a missing account.
+	admin=$(env_get SKLAD_ADMIN_USERNAME)
+	if [ -n "$admin" ] && ! LC_ALL=C grep -aq "$admin" "$src"; then
+		[ "${SKLAD_SKIP_ADMIN_CHECK:-0}" = 1 ] ||
+			die "$src has no account named '$admin' (SKLAD_ADMIN_USERNAME); the Admin could not sign in. Prepare it with the same admin username, or set SKLAD_SKIP_ADMIN_CHECK=1 if you are sure."
+	fi
 	echo "This REPLACES the live database with $src."
-	echo "The current files are kept in the volume under /data/pre-restore-<time>/."
+	echo "A backup is taken first; the current files are also kept in the volume"
+	echo "under /data/pre-restore-<time>/."
 	confirm restore
+	if running "$APP"; then
+		note "Backing up the current live database first"
+		backup >/dev/null || die "backup failed; nothing was changed"
+	fi
 	compose stop app
 	ts=$(date -u +%Y%m%dT%H%M%SZ)
 	docker run --rm -i --entrypoint sh -v "$DATA_VOLUME:/data" "sklad:$tag" -c "
@@ -292,7 +306,7 @@ case "$cmd" in
 	config)      compose config "$@" ;;
 	compose)     compose "$@" ;;
 	*)
-		sed -n '4,26p' "$0" | sed 's/^# \{0,1\}//'
+		sed -n '4,27p' "$0" | sed 's/^# \{0,1\}//'
 		[ -z "$cmd" ] || exit 1
 		;;
 esac

@@ -114,7 +114,8 @@
     "editingAsAdmin": "Modifica come amministratore",
     "lockedByOther": "Qualcun altro sta modificando questa voce. Aggiorna e riprova.",
     "archive": "Archivia",
-    "exportAll": "Esporta tutti i record (ignora i filtri di ricerca)"
+    "exportAll": "Esporta tutti i record (ignora i filtri di ricerca)",
+    "autoId": "Automatico"
   },
   "pagination": {
     "showEntries": "Voci per pagina",

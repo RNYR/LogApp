@@ -95,6 +95,10 @@ retired.
 `reset` gives you a clean empty database again. It only removes the
 `sklad_test_*` volumes; the live data is never touched.
 
+To build up the stock on the test copy and then make that database the live
+one, follow [FRESH-START.md](FRESH-START.md) (`./scripts/test-stack export`
+here, `./scripts/sklad-stack restore-db` on the live stack).
+
 ## 7. Retiring the test stack
 
 ```sh

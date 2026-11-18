@@ -415,6 +415,19 @@ test.describe('inventory usability', () => {
     await expect(page.getByRole('region', { name: 'Rental buffer' }).getByRole('button', { name: 'Save selected (2)' })).toBeInViewport()
   })
 
+  test('a new entry can take the ID already printed on its label', async ({ page }) => {
+    await mockApi(page)
+    await page.goto('/')
+    await page.getByRole('button', { name: 'Add new entry' }).click()
+    await page.getByLabel('ID', { exact: true }).fill('pv-17')
+    await page.getByLabel('Item name').fill('Labelled lens')
+    const created = page.waitForRequest(
+      (request) => request.method() === 'POST' && new URL(request.url()).pathname === '/api/v1/items',
+    )
+    await page.getByRole('button', { name: 'Save', exact: true }).click()
+    expect((await created).postDataJSON()).toMatchObject({ asset_tag: 'PV-017', name: 'Labelled lens' })
+  })
+
   test('manual entry completes short codes and keeps unknown ones', async ({ page }) => {
     await mockApi(page)
     await page.goto('/scan')

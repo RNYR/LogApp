@@ -24,7 +24,7 @@ cp Dockerfile .dockerignore go.mod go.sum docker-compose.test.yml .env.test.exam
 cp deploy/Caddyfile.test "$OUT/deploy/"
 cp deploy/avahi/sklad-test.service "$OUT/deploy/avahi/"
 cp scripts/test-stack scripts/nas-replace "$OUT/scripts/"
-cp docs/DEPLOY-TEST.md "$OUT/docs/"
+cp docs/DEPLOY-TEST.md docs/FRESH-START.md "$OUT/docs/"
 chmod +x "$OUT/scripts/test-stack" "$OUT/scripts/nas-replace"
 
 EXCLUDES=(--exclude node_modules --exclude dist --exclude test-results

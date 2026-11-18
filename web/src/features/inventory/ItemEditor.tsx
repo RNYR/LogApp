@@ -2,6 +2,7 @@ import { type ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
 import type { Item, ItemInput, ItemPatch, StatusOption, TypeOption } from '../../lib/api'
 import { Button, Field, Input, Select, TableCell } from '../../components/ui'
+import { canonicalAssetTag } from '../../lib/scanner'
 
 /**
  * Mutable, form-friendly representation of an inventory item.
@@ -59,7 +60,9 @@ export function toEditableItem(item: Item): EditableItem {
 /** Body for `POST /items` (omits the tag when blank so the server auto-assigns). */
 export function editableToInput(draft: EditableItem): ItemInput {
   return {
-    ...(draft.assetTag.trim() ? { asset_tag: draft.assetTag.trim() } : {}),
+    // A typed ID (e.g. the one already on a printed label) is completed like a
+    // scanned one: pv-17 → PV-017. Empty lets the server pick the next number.
+    ...(draft.assetTag.trim() ? { asset_tag: canonicalAssetTag(draft.assetTag) } : {}),
     name: draft.name.trim(),
     sn: draft.sn.trim(),
     ...(draft.type ? { type: draft.type } : {}),
@@ -131,7 +134,22 @@ export function ItemEditor({
       </TableCell>
 
       <TableCell>
-        <span className="font-mono text-xs text-content-muted">{draft.assetTag || '—'}</span>
+        {draft.id === null ? (
+          <Field label={t('inventory.columns.id')} srOnlyLabel>
+            {({ id, 'aria-describedby': describedBy }) => (
+              <Input
+                id={id}
+                aria-describedby={describedBy}
+                className="w-28 font-mono"
+                value={draft.assetTag}
+                placeholder={t('inventory.autoId')}
+                onChange={(event) => onChange({ assetTag: event.target.value })}
+              />
+            )}
+          </Field>
+        ) : (
+          <span className="font-mono text-xs text-content-muted">{draft.assetTag || '—'}</span>
+        )}
       </TableCell>
 
       <TableCell>
